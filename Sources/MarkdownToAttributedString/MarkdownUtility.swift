@@ -18,5 +18,5 @@ let markdownDebugLogging = true
         }
     }
 #else
-    func MarkdownDebugLog(_ message: String, _ args: CVarArg...) {}
+func MarkdownDebugLog(_ message: String, file: String = #file, line: Int = #line, function: String = #function) {}
 #endif
