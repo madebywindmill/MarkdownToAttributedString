@@ -25,9 +25,9 @@ import Markdown
 ///     to level 1 headings (`#`), the second to level 2 headings (`##`), and so on. If there are fewer values than
 ///     heading levels, the last size in the array is reused for remaining levels.
 public struct MarkdownAttributes {
-    var baseAttributes: StringAttrs
-    var styleAttributes: [MarkupType: StringAttrs]
-    var headingPointSizes: [CGFloat] = [22, 18, 15, 14, 13, 11]
+    public var baseAttributes: StringAttrs
+    public var styleAttributes: [MarkupType: StringAttrs]
+    public var headingPointSizes: [CGFloat] = [22, 18, 15, 14, 13, 11]
 
     public init(baseAttributes: StringAttrs, styleAttributes: [MarkupType : StringAttrs]) {
         self.baseAttributes = baseAttributes
