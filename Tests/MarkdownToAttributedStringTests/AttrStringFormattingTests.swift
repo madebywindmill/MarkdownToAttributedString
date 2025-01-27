@@ -21,6 +21,8 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         let boldRange = (attributedString.string as NSString).range(of: "bold")
         let attributes = attributedString.attributes(at: boldRange.location, effectiveRange: nil)
         XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.strong))
+        
+        XCTAssertEqual(attributedString.string, "This is bold text.")
     }
     
     func testItalicText() {
@@ -43,6 +45,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.inlineCode))
     }
     
+    // Currently fails: Missing newline at end.
     func testUnorderedList() {
         let markdown = "- Item 1\n- Item 2"
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
@@ -50,7 +53,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertTrue(attributedString.string.contains("Item 2"))
         
         let newlineCount = attributedString.string.filter { $0 == "\n" }.count
-        XCTAssertEqual(newlineCount, 5) // 2 at beginning, 2 at end, 1 in the middle
+        XCTAssertEqual(newlineCount, 5) // 2 at beginning, 1 in the middle, 2 at end
     }
         
     func testCompositeMarkdown() {
@@ -104,5 +107,43 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         }
     }
 
-    
+    // Line break testing -- general idea is to ignore newlines at the beginning and ends of markdown. This is due to CommonMark 4.9 Blank Lines: "Blank lines between block-level elements are ignored, except for the role they play in determining whether a list is tight or loose."
+    func testLineBreaks1() {
+        let markdown = "Line1\nLine2"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, markdown)
+    }
+
+    func testLineBreaks2() {
+        let markdown = "Line1\nLine2\n"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "Line1\nLine2")
+    }
+
+    func testLineBreaks3() {
+        let markdown = "\nLine1\nLine2\n"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "Line1\nLine2")
+    }
+
+    func testLineBreaks4() {
+        let markdown = "\n\nLine1\nLine2\n\n"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "Line1\nLine2")
+    }
+
+    func testLineBreaks5() {
+        let markdown = "Line1\n\n\nLine2"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "Line1\nLine2")
+    }
+
+    // This fails. It _should_ work because CommonMark 6.9 Hard line breaks: "A line break (not in a code span or HTML tag) that is preceded by two or more spaces and does not occur at the end of a block is parsed as a hard line break."
+    // NB: I don't think this convention is very common.
+    func testLineBreaks6() {
+        let markdown = "Line1  \n  \n  \nLine2"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "Line1\n\n\nLine2")
+    }
+
 }

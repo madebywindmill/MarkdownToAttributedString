@@ -57,14 +57,17 @@ struct AttributedStringVisitor: MarkupVisitor {
         let isInListItem = paragraph.parent is ListItem
 
         if !isInListItem
-            && attributedString.length > 0 /* don't add newlines at the very beginning */
+            && attributedString.length > 0 // don't add newlines at the very beginning
         {
             appendNewlinesIfNeeded(1)
         }
 
         visitChildren(of: paragraph)
 
-        appendNewlinesIfNeeded(1)
+        // *do* add newlines within the list
+        if isInListItem {
+            appendNewlinesIfNeeded(1)
+        }
 
         MarkdownDebugLog("<close>", file: "")
     }
