@@ -39,6 +39,17 @@ public struct MarkdownAttributes {
         return styleAttributes[type] ?? baseAttributes
     }
 
+    public mutating func setBaseAttribute(_ attribute: NSAttributedString.Key, _ value: Any) {
+        var attrs = baseAttributes
+        attrs[attribute] = value
+        baseAttributes = attrs
+    }
+
+    public mutating func setStyleAttribute(_ attribute: NSAttributedString.Key, _ value: Any, forType type: MarkupType) {
+        var attrs = styleAttributes[type] ?? [:]
+        attrs[attribute] = value
+        styleAttributes[type] = attrs
+    }
 }
 
 /// A default set of MarkdownAttributes, intended mainly for debugging and demonstration.
