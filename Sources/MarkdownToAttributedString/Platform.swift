@@ -42,6 +42,11 @@ public extension UIFont {
         }
         return UIFont(descriptor: descriptor, size: fontSize)
     }
+    
+    // NSFont parity
+    func displayName() -> String? {
+        return fontName
+    }
 }
 #elseif os(OSX)
 public extension NSFont {

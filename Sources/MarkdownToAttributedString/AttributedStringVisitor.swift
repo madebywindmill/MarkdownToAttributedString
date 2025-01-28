@@ -51,6 +51,23 @@ struct AttributedStringVisitor: MarkupVisitor {
         MarkdownDebugLog("<close>", file: "")
     }
     
+    // NB: I've never seen this called!
+    mutating func visitLineBreak(_ lineBreak: LineBreak) {
+        MarkdownDebugLog("<open>", file: "")
+        appendToAttrStr(string: "\n")
+        MarkdownDebugLog("<close>", file: "")
+    }
+        
+    mutating func visitInlineHTML(_ inlineHTML: InlineHTML) {
+        if inlineHTML.rawHTML == "<br>" {
+            appendToAttrStr(string: "\n")
+        }
+    }
+    
+    mutating func visitHTMLBlock(_ html: HTMLBlock) {
+        print("*** [MarkdownToAttributedString] warning: HTML blocks aren't yet support. (HTML: \(html.rawHTML))")
+    }
+    
     mutating func visitParagraph(_ paragraph: Paragraph) {
         MarkdownDebugLog("<open>", file: "")
 
