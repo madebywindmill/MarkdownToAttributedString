@@ -138,8 +138,6 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertEqual(attributedString.string, "Line1\nLine2")
     }
 
-    // This fails. It _should_ work because CommonMark 6.9 Hard line breaks: "A line break (not in a code span or HTML tag) that is preceded by two or more spaces and does not occur at the end of a block is parsed as a hard line break."
-    // NB: I don't think this convention is very common.
     func testLineBreaks6() {
         let markdown = "Line1<br><br><br>Line2"
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
