@@ -107,6 +107,30 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         }
     }
 
+    // https://github.com/madebywindmill/MarkdownToAttributedString/issues/1
+    func testHeadingLineBreaks1() {
+        let markdown = "# Heading 1"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        
+        XCTAssertFalse(attributedString.string.starts(with: "\n"), attributedString.string)
+    }
+
+    func testHeadingLineBreaks2() {
+        let markdown = "# Heading 1\nSome text"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        
+        XCTAssertTrue(attributedString.string == "Heading 1\n\nSome text")
+    }
+    
+    // https://github.com/madebywindmill/MarkdownToAttributedString/issues/2
+    func testHeadingLineBreaks3() {
+        let markdown = "# Heading 1"
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        
+        XCTAssertFalse(attributedString.string.hasSuffix("\n\n"), attributedString.string)
+    }
+
+
     // Line break testing -- general idea is to ignore newlines at the beginning and ends of markdown. This is due to CommonMark 4.9 Blank Lines: "Blank lines between block-level elements are ignored, except for the role they play in determining whether a list is tight or loose."
     func testLineBreaks1() {
         let markdown = "Line1\nLine2"
@@ -143,7 +167,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
         XCTAssertEqual(attributedString.string, "Line1\n\n\nLine2")
     }
-
+    
     // Fails.
     // I haven't tested extensively but I don't think SwiftMarkdown is handling hard line breaks as described by CommonMark (using 2+ spaces or a \ before the newline) correctly, or at all. On the other hand they don't work in CommonMark's own playground so maybe I'm misunderstanding.
 //    func testLineBreaks6() {

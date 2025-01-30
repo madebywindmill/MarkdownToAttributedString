@@ -65,7 +65,7 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
     
     mutating func visitHTMLBlock(_ html: HTMLBlock) {
-        print("*** [MarkdownToAttributedString] warning: HTML blocks aren't yet support. (HTML: \(html.rawHTML))")
+        print("*** [MarkdownToAttributedString] warning: HTML blocks aren't yet supported. (HTML: \(html.rawHTML))")
     }
     
     mutating func visitParagraph(_ paragraph: Paragraph) {
@@ -247,7 +247,9 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         currentAttributes.mergeAttributes(styleAttrs)
 
-        appendNewlinesIfNeeded(2)
+        if attributedString.length > 0 { // don't add newlines at the very beginning
+            appendNewlinesIfNeeded(2)
+        }
         visitChildren(of: heading)
         appendNewlinesIfNeeded(2)
 
