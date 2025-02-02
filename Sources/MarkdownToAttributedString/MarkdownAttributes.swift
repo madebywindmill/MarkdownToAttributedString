@@ -36,7 +36,13 @@ public struct MarkdownAttributes {
     
     /// Returns the specified attributes for the given markup type, or, if none are found, the base attributes.
     public func attributesForType(_ type: MarkupType) -> StringAttrs {
-        return styleAttributes[type] ?? baseAttributes
+        var combinedAttributes = baseAttributes
+        
+        if let styleAttributesForType = styleAttributes[type] {
+            combinedAttributes.merge(styleAttributesForType) { (_, new) in new }
+        }
+        
+        return combinedAttributes
     }
 
     public mutating func setBaseAttribute(_ attribute: NSAttributedString.Key, _ value: Any) {
