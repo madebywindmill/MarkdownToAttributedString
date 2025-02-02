@@ -52,7 +52,7 @@ public struct MarkdownAttributes {
     }
 }
 
-/// A default set of MarkdownAttributes, intended mainly for debugging and demonstration.
+/// A default set of MarkdownAttributes, intended mainly for tests, debugging, and demonstration.
 public extension MarkdownAttributes {
     static var `default`: MarkdownAttributes {
         let indentedPStyle = NSMutableParagraphStyle()
@@ -62,7 +62,7 @@ public extension MarkdownAttributes {
         return MarkdownAttributes(
             baseAttributes: [
                 .font: CocoaFont.systemFont(ofSize: 13),
-                .foregroundColor: CocoaColor.black
+                .foregroundColor: CocoaColor.darkGray
             ],
             styleAttributes: [
                 .strong: [
@@ -70,6 +70,10 @@ public extension MarkdownAttributes {
                 ],
                 .emphasis: [
                     .font: CocoaFont.systemItalicFont(ofSize: 13)
+                ],
+                .strikethrough: [
+                    .strikethroughStyle: 1,
+                    .strikethroughColor: CocoaColor.controlLightHighlightColor
                 ],
                 .inlineCode: [
                     .font: CocoaFont.monospacedFont(ofSize: 12, weight: .regular),
@@ -100,5 +104,12 @@ public extension MarkdownAttributes {
     
     func fontAttributeForType(_ type: MarkupType) -> CocoaFont {
         return (attributesForType(type)[.font] as? CocoaFont) ?? CocoaFont.systemFont(ofSize: 13)
+    }
+    
+    func valueForAttribute<T>(_ attribute: NSAttributedString.Key, type: MarkupType) -> T? {
+        if let styleAttributeValue = styleAttributes[type]?[attribute] as? T {
+            return styleAttributeValue
+        }
+        return baseAttributes[attribute] as? T
     }
 }

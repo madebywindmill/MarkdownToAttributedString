@@ -45,6 +45,24 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.inlineCode))
     }
     
+    func testStrikethrough() {
+        let markdown = "Here's some ~~strikethrough~~ text."
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        let styleRange = (attributedString.string as NSString).range(of: "strikethrough")
+        let attributes = attributedString.attributes(at: styleRange.location, effectiveRange: nil)
+        XCTAssertEqual(attributes[.strikethroughStyle] as? Int, 1)
+        
+        guard let expectedStrikeColor: CocoaColor = Self.defaultMDAttrs.valueForAttribute(.strikethroughColor, type: .strikethrough) else {
+            XCTFail(); return
+        }
+        guard let expectedFontColor: CocoaColor = Self.defaultMDAttrs.valueForAttribute(.foregroundColor, type: .strikethrough) else {
+            XCTFail(); return
+        }
+
+        XCTAssertEqual(attributes[.strikethroughColor] as? CocoaColor, expectedStrikeColor)
+        XCTAssertEqual(attributes[.foregroundColor] as? CocoaColor, expectedFontColor)
+    }
+    
     // Currently fails: Missing newline at end.
     func testUnorderedList() {
         let markdown = "- Item 1\n- Item 2"
@@ -122,7 +140,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertTrue(attributedString.string == "Heading 1\n\nSome text")
     }
     
-    // https://github.com/madebywindmill/MarkdownToAttributedString/issues/2
+    // Fails: https://github.com/madebywindmill/MarkdownToAttributedString/issues/2
     func testHeadingLineBreaks3() {
         let markdown = "# Heading 1"
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)

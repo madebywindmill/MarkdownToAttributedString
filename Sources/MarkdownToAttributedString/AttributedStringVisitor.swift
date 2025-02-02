@@ -100,7 +100,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         visitWithTemporaryAttributes(markdownAttributes.styleAttributes[.emphasis] ?? markdownAttributes.baseAttributes, emphasis)
         MarkdownDebugLog("<close>", file: "")
     }
-    
+            
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
         MarkdownDebugLog("<open>", file: "")
         var styleAttrs = markdownAttributes.attributesForType(.inlineCode)
@@ -278,17 +278,7 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
         MarkdownDebugLog("<open>", file: "")
-
-        var styleAttrs = markdownAttributes.baseAttributes
-        styleAttrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-
-        let previousAttributes = currentAttributes
-        currentAttributes.mergeAttributes(styleAttrs)
-
-        visitChildren(of: strikethrough)
-
-        currentAttributes = previousAttributes
-
+        visitWithTemporaryAttributes(markdownAttributes.styleAttributes[.strikethrough] ?? markdownAttributes.baseAttributes, strikethrough)
         MarkdownDebugLog("<close>", file: "")
     }
     

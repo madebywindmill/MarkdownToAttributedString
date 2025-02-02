@@ -22,6 +22,7 @@ extension StringAttrs {
 public enum MarkupType: Hashable {
     case strong
     case emphasis
+    case strikethrough
     case inlineCode
     case codeBlock
     case heading
@@ -41,6 +42,8 @@ extension Markup {
                 return .emphasis
             case is InlineCode:
                 return .inlineCode
+            case is Strikethrough:
+                return .strikethrough
             case is CodeBlock:
                 return .codeBlock
             case is Heading:
