@@ -79,7 +79,7 @@ public extension MarkdownAttributes {
                 ],
                 .strikethrough: [
                     .strikethroughStyle: 1,
-                    .strikethroughColor: CocoaColor.controlLightHighlightColor
+                    .strikethroughColor: CocoaColor.lightGray
                 ],
                 .inlineCode: [
                     .font: CocoaFont.monospacedFont(ofSize: 12, weight: .regular),
