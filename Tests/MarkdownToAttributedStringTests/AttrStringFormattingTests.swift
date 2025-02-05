@@ -16,23 +16,39 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     func testBoldText() {
         let markdown = "This is **bold** text."
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
-        XCTAssertTrue(attributedString.string.contains("bold"))
-        
-        let boldRange = (attributedString.string as NSString).range(of: "bold")
-        let attributes = attributedString.attributes(at: boldRange.location, effectiveRange: nil)
-        XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.strong))
-        
         XCTAssertEqual(attributedString.string, "This is bold text.")
+
+        let styledRange = (attributedString.string as NSString).range(of: "bold")
+        let attributes = attributedString.attributes(at: styledRange.location, effectiveRange: nil)
+        let font = attributes[.font] as! CocoaFont
+        let expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
+        
+        XCTAssertTrue(font.customIsEqual(to: expectedFont))
     }
     
     func testItalicText() {
         let markdown = "This is *italic* text."
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
-        XCTAssertTrue(attributedString.string.contains("italic"))
+        XCTAssertEqual(attributedString.string, "This is italic text.")
+
+        let styledRange = (attributedString.string as NSString).range(of: "italic")
+        let attributes = attributedString.attributes(at: styledRange.location, effectiveRange: nil)
+        let font = attributes[.font] as! CocoaFont
+        let expectedFont = Self.defaultMDAttrs.fontAttributeForType(.emphasis)
+
+        XCTAssertTrue(font.customIsEqual(to: expectedFont))
+    }
+    
+    func testBoldItalics() {
+        let markdown = "This has **_both_**."
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertEqual(attributedString.string, "This has both.")
         
-        let italicRange = (attributedString.string as NSString).range(of: "italic")
-        let attributes = attributedString.attributes(at: italicRange.location, effectiveRange: nil)
-        XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.emphasis))
+        let styledRange = (attributedString.string as NSString).range(of: "both")
+        let attributes = attributedString.attributes(at: styledRange.location, effectiveRange: nil)
+        let font = attributes[.font] as! CocoaFont
+        XCTAssertTrue(font.containsBoldTrait())
+        XCTAssertTrue(font.containsItalicsTrait())
     }
     
     func testInlineCode() {
@@ -40,10 +56,24 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
         XCTAssertTrue(attributedString.string.contains("inline code"))
         
-        let codeRange = (attributedString.string as NSString).range(of: "inline code")
-        let attributes = attributedString.attributes(at: codeRange.location, effectiveRange: nil)
+        let styledRange = (attributedString.string as NSString).range(of: "inline code")
+        let attributes = attributedString.attributes(at: styledRange.location, effectiveRange: nil)
         XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.inlineCode))
     }
+    
+    func testNestedInlineCode() {
+        let markdown = "Here is **`nested inline code`**."
+        let attributedString = AttributedStringFormatter.format(markdown: markdown, attributes: Self.defaultMDAttrs)
+        XCTAssertTrue(attributedString.string.contains("nested inline code"))
+        
+        let styledRange = (attributedString.string as NSString).range(of: "nested inline code")
+        
+        let attributes = attributedString.attributes(at: styledRange.location, effectiveRange: nil)
+        let font = attributes[.font] as! CocoaFont
+        XCTAssertTrue(font.containsBoldTrait())
+        XCTAssertTrue(font.isMonospaced())
+    }
+
     
     func testStrikethrough() {
         let markdown = "Here's some ~~strikethrough~~ text."
@@ -119,9 +149,9 @@ final class MarkdownToAttributedStringTests: XCTestCase {
             let headingRange = (attributedString.string as NSString).range(of: headingText)
             let attributes = attributedString.attributes(at: headingRange.location, effectiveRange: nil)
 
-            let actualFont = attributes[.font] as? CocoaFont
-            XCTAssertEqual(actualFont?.displayName, headingFont.displayName, "Font name for \(headingText) doesn't match.")
-            XCTAssertEqual(actualFont?.pointSize, Self.defaultMDAttrs.headingPointSizes[i-1], "Font point size for \(headingText) doesn't match.")
+            let actualFont = attributes[.font] as! CocoaFont
+            XCTAssertEqual(actualFont.fontDescriptor.postscriptName, headingFont.fontDescriptor.postscriptName)
+            XCTAssertEqual(actualFont.pointSize, Self.defaultMDAttrs.headingPointSizes[i-1], "Font point size for \(headingText) doesn't match.")
         }
     }
 
@@ -194,4 +224,13 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 //        XCTAssertEqual(attributedString.string, "Line1\n\n\nLine2")
 //    }
 
+}
+
+extension CocoaFont {
+    
+    // Sometimes we can't just compare fonts because they can end up with slightly different names, e.g. "SFNS-Bold" vs "AppleSystemUIFontBold". The postscript name is usually consistent though.
+    func customIsEqual(to other: CocoaFont) -> Bool {
+        return self.fontDescriptor.postscriptName == other.fontDescriptor.postscriptName
+            && self.pointSize == other.pointSize
+    }
 }
