@@ -6,7 +6,7 @@
 
 import Foundation
 
-let markdownDebugLogging = true
+let markdownDebugLogging = false
 
 // Debug logging
 #if DEBUG

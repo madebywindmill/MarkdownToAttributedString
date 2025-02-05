@@ -47,6 +47,15 @@ public extension UIFont {
     func displayName() -> String? {
         return fontName
     }
+    
+    func containsBoldTrait() -> Bool {
+        return fontDescriptor.symbolicTraits.contains(.traitBold)
+    }
+    
+    func containsItalicsTrait() -> Bool {
+        return fontDescriptor.symbolicTraits.contains(.traitItalic)
+    }
+    
 }
 #elseif os(OSX)
 public extension NSFont {
@@ -63,5 +72,36 @@ public extension NSFont {
         let descriptor = systemFont.fontDescriptor.withSymbolicTraits(.italic)
         return NSFont(descriptor: descriptor, size: fontSize) ?? systemFont
     }
+    
+    func containsBoldTrait() -> Bool {
+        return fontDescriptor.symbolicTraits.contains(.bold)
+    }
+    
+    func containsItalicsTrait() -> Bool {
+        return fontDescriptor.symbolicTraits.contains(.italic)
+    }
 }
 #endif
+
+extension CocoaFont {
+    
+    func isMonospaced() -> Bool {
+        #if os(iOS) || os(watchOS)
+        let descriptor = fontDescriptor
+        let attributes = descriptor.fontAttributes
+        
+        if let featureSettings = attributes[UIFontDescriptor.AttributeName.featureSettings] as? [[UIFontDescriptor.FeatureKey: Any]] {
+            return featureSettings.contains {
+                ($0[.featureIdentifier] as? Int) == kNumberSpacingType &&
+                ($0[.typeIdentifier] as? Int) == kMonospacedNumbersSelector
+            }
+        }
+        
+        let postscriptName = descriptor.postscriptName.lowercased()
+        return postscriptName.contains("mono") || postscriptName.contains("code") || postscriptName.contains("courier")
+
+        #elseif os(macOS)
+        return fontDescriptor.symbolicTraits.contains(.monoSpace)
+        #endif
+    }
+}
