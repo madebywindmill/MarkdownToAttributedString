@@ -91,16 +91,18 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitStrong(_ strong: Strong) {
         MarkdownDebugLog("<open>", file: "")
-        visitWithTemporaryAttributes(markdownAttributes.styleAttributes[.strong] ?? markdownAttributes.baseAttributes, strong)
+        let newAttributes = markdownAttributes.styleAttributes[.strong] ?? [:]
+        visitWithMergedAttributes(newAttributes, strong, markupType: .strong)
         MarkdownDebugLog("<close>", file: "")
     }
 
     mutating func visitEmphasis(_ emphasis: Emphasis) {
         MarkdownDebugLog("<open>", file: "")
-        visitWithTemporaryAttributes(markdownAttributes.styleAttributes[.emphasis] ?? markdownAttributes.baseAttributes, emphasis)
+        let newAttributes = markdownAttributes.styleAttributes[.emphasis] ?? [:]
+        visitWithMergedAttributes(newAttributes, emphasis, markupType: .emphasis)
         MarkdownDebugLog("<close>", file: "")
     }
-            
+
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
         MarkdownDebugLog("<open>", file: "")
         var styleAttrs = markdownAttributes.attributesForType(.inlineCode)
@@ -300,6 +302,58 @@ struct AttributedStringVisitor: MarkupVisitor {
         currentAttributes = previousAttributes
     }
     
+    private mutating func visitWithMergedAttributes(
+        _ newAttributes: StringAttrs,
+        _ markup: Markup,
+        markupType: MarkupType
+    ) {
+        let previousAttributes = currentAttributes
+        var mergedAttributes = currentAttributes
+        mergedAttributes.mergeAttributes(newAttributes) // Merge general attributes
+
+        if let expectedFont = markdownAttributes.fontAttributeForType(markupType) as? CocoaFont,
+           let currentFont = currentAttributes[.font] as? CocoaFont {
+            let newDescriptor = mergeFontDescriptors(base: currentFont.fontDescriptor, expected: expectedFont.fontDescriptor)
+            mergedAttributes[.font] = CocoaFont(descriptor: newDescriptor, size: expectedFont.pointSize)
+        }
+
+        currentAttributes = mergedAttributes
+        visitChildren(of: markup)
+        currentAttributes = previousAttributes
+    }
+
+    private func mergeFontDescriptors(base: FontDescriptor, expected: FontDescriptor) -> FontDescriptor {
+        var traits = base.symbolicTraits
+
+        // Preserve italics if the expected font has it
+#if os(iOS) || os(watchOS)
+        if expected.symbolicTraits.contains(.traitItalic) {
+            traits.insert(.traitItalic)
+        }
+#elseif os(macOS)
+        if expected.symbolicTraits.contains(.italic) {
+            traits.insert(.italic)
+        }
+#endif
+        
+        // Preserve bold if the expected font has it
+#if os(iOS) || os(watchOS)
+        if expected.symbolicTraits.contains(.traitBold) {
+            traits.insert(.traitBold)
+        }
+#elseif os(macOS)
+        if expected.symbolicTraits.contains(.bold) {
+            traits.insert(.bold)
+        }
+#endif
+        
+#if os(iOS) || os(watchOS)
+        return expected.withSymbolicTraits(traits) ?? expected
+#elseif os(macOS)
+        return expected.withSymbolicTraits(traits)
+#endif
+    }
+
     private mutating func appendToAttrStr(string: String, attrs: StringAttrs? = nil) {
         let actualAtts = attrs ?? currentAttributes
         MarkdownDebugLog("Appending:\n\(string)", file: "")
