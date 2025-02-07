@@ -19,7 +19,7 @@ extension StringAttrs {
 }
 
 /// MarkupType, since `Markup` itself isn't hashable.
-public enum MarkupType: Hashable {
+public enum MarkupType: Hashable, CaseIterable {
     case strong
     case emphasis
     case strikethrough
@@ -31,6 +31,12 @@ public enum MarkupType: Hashable {
     case listItem
     case link
     case unknown
+}
+
+public extension MarkupType {
+    static var all: [MarkupType] {
+        return Self.allCases
+    }
 }
 
 extension Markup {
