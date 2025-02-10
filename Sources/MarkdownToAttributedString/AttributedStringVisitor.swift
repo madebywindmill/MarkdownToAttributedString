@@ -480,7 +480,9 @@ struct AttributedStringVisitor: MarkupVisitor {
         if newlinesToAppend > 0 {
             let newlines = String(repeating: "\n", count: newlinesToAppend)
             debugLog("Manually appending \(newlinesToAppend) newlines to reach \(count) total", file: "")
-            attributedString.append(NSAttributedString(string: newlines))
+            attributedString.append(NSAttributedString(
+                string: newlines,
+                attributes: markdownAttributes.baseAttributes))
         }
     }
     
