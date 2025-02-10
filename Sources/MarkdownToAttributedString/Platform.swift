@@ -42,12 +42,7 @@ public extension UIFont {
         }
         return UIFont(descriptor: descriptor, size: fontSize)
     }
-    
-    // NSFont parity
-    func displayName() -> String? {
-        return fontName
-    }
-    
+        
     func containsBoldTrait() -> Bool {
         return fontDescriptor.symbolicTraits.contains(.traitBold)
     }
@@ -55,7 +50,6 @@ public extension UIFont {
     func containsItalicsTrait() -> Bool {
         return fontDescriptor.symbolicTraits.contains(.traitItalic)
     }
-    
 }
 #elseif os(OSX)
 public extension NSFont {
@@ -103,5 +97,13 @@ extension CocoaFont {
         #elseif os(macOS)
         return fontDescriptor.symbolicTraits.contains(.monoSpace)
         #endif
+    }
+    
+    var compatibleDisplayName: String {
+#if os(iOS)  || os(watchOS)
+        return self.fontName
+#elseif os(macOS)
+        return self.displayName ?? "unknown"
+#endif
     }
 }

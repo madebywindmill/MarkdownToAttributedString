@@ -27,11 +27,7 @@ public extension NSAttributedString {
                 str += "<NSParagraphStyle>"
             }
             if let font = nextStr.attribute(.font, at: 0, effectiveRange: nil) as? CocoaFont {
-                if let displayName = font.displayName {
-                    str += "<Font name=“\(displayName)”>"
-                } else {
-                    str += "<Font>"
-                }
+                str += "<Font name=“\(font.compatibleDisplayName)”>"
             }
             
             if let markdownEl = nextStr.attribute(.markdownElement, at: 0, effectiveRange: nil) as? MarkdownElementAttribute {
@@ -68,7 +64,7 @@ public extension NSAttributedString {
     }
 }
 
-public extension String {
+extension String {
     var nsString: NSString {
         return self as NSString
     }
@@ -94,3 +90,4 @@ public extension String {
     }
 
 }
+
