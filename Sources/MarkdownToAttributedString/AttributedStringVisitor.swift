@@ -18,20 +18,27 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     private var attributedString = NSMutableAttributedString()
     private var currentAttributes: StringAttrs
+    private var formattingOptions: FormattingOptions?
+    private var shuldAddCustomAttr: Bool {
+        return formattingOptions?.addCustomMarkdownElementAttributes ?? false
+    }
+    private let loggingQ = DispatchQueue(label: "MTAS.logging")
 
     init(markdown: String,
-                attributes: MarkdownAttributes? = nil) {
+         attributes: MarkdownAttributes? = nil,
+         options: FormattingOptions? = nil) {
         self.markdown = markdown
         self.markdownAttributes = attributes ?? MarkdownAttributes.default
         self.currentAttributes = self.markdownAttributes.baseAttributes
+        self.formattingOptions = options
     }
 
     mutating func convert() -> NSAttributedString {
-        MarkdownDebugLog("Raw markdown to process:\n\(markdown)\n")
+        debugLog("Raw markdown to process:\n\(markdown)\n")
         let document = Document(parsing: markdown)
         visit(document)
-        MarkdownDebugLog("Final plain text render:\n\(attributedString.string)\n\n")
-        MarkdownDebugLog("Final text+attrs:\n\(attributedString.debugDescription)")
+        debugLog("Final plain text render:\n\(attributedString.string)\n\n")
+        debugLog("Final text+attrs:\n\(attributedString.debugDescription)")
         return attributedString
     }
 
@@ -40,22 +47,22 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
 
     mutating func visitText(_ text: Text) {
-        MarkdownDebugLog("<open>", file: "")
+        debugLog("<open>", file: "")
         appendToAttrStr(string: text.string)
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitSoftBreak(_ softBreak: SoftBreak) {
-        MarkdownDebugLog("<open>", file: "")
+        debugLog("<open>", file: "")
         appendToAttrStr(string: "\n")
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
     
     // NB: I've never seen this called!
     mutating func visitLineBreak(_ lineBreak: LineBreak) {
-        MarkdownDebugLog("<open>", file: "")
+        debugLog("<open>", file: "")
         appendToAttrStr(string: "\n")
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
         
     mutating func visitInlineHTML(_ inlineHTML: InlineHTML) {
@@ -69,7 +76,7 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
     
     mutating func visitParagraph(_ paragraph: Paragraph) {
-        MarkdownDebugLog("<open>", file: "")
+        debugLog("<open>", file: "")
 
         let isInListItem = paragraph.parent is ListItem
 
@@ -86,31 +93,47 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewlinesIfNeeded(1)
         }
 
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitStrong(_ strong: Strong) {
-        MarkdownDebugLog("<open>", file: "")
+        guard optionsSupportEl(.strong) else {
+            appendPlainText(strong.plainText)
+            debugLog("Skipping unsupported: strong"); return
+        }
+        debugLog("<open>", file: "")
         let newAttributes = markdownAttributes.styleAttributes[.strong] ?? [:]
         visitWithMergedAttributes(newAttributes, strong, markupType: .strong)
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
-
+    
     mutating func visitEmphasis(_ emphasis: Emphasis) {
-        MarkdownDebugLog("<open>", file: "")
+        guard optionsSupportEl(.emphasis) else {
+            appendPlainText(emphasis.plainText)
+            debugLog("Skipping unsupported: emphasis"); return
+        }
+        debugLog("<open>", file: "")
         let newAttributes = markdownAttributes.styleAttributes[.emphasis] ?? [:]
         visitWithMergedAttributes(newAttributes, emphasis, markupType: .emphasis)
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
-        MarkdownDebugLog("<open>", file: "")
+        guard optionsSupportEl(.inlineCode) else {
+            appendPlainText(inlineCode.plainText)
+            debugLog("Skipping unsupported: inlineCode"); return
+        }
+        debugLog("<open>", file: "")
         var styleAttrs = markdownAttributes.attributesForType(.inlineCode)
 
         var currentParent = inlineCode.parent
         while let parent = currentParent {
             if parent is Strong {
                 if let baseFont = styleAttrs[.font] as? CocoaFont {
+                    if shuldAddCustomAttr {
+                        
+                        styleAttrs.addMarkdownElementType(.strong)
+                    }
 #if os(iOS) || os(watchOS)
                     styleAttrs[.font] = CocoaFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.traitBold) ?? baseFont.fontDescriptor, size: baseFont.pointSize)
 #elseif os(macOS)
@@ -119,6 +142,9 @@ struct AttributedStringVisitor: MarkupVisitor {
                 }
             } else if parent is Emphasis {
                 if let baseFont = styleAttrs[.font] as? CocoaFont {
+                    if shuldAddCustomAttr {
+                        styleAttrs.addMarkdownElementType(.emphasis)
+                    }
 #if os(iOS) || os(watchOS)
                     styleAttrs[.font] = CocoaFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.traitItalic) ?? baseFont.fontDescriptor, size: baseFont.pointSize)
 #elseif os(macOS)
@@ -130,24 +156,45 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
 
         appendToAttrStr(string: inlineCode.code, attrs: styleAttrs)
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
-        MarkdownDebugLog("<open>", file: "")
+        guard optionsSupportEl(.codeBlock) else {
+            appendPlainText(codeBlock.code)
+            debugLog("Skipping unsupported: codeBlock"); return
+        }
+        debugLog("<open>", file: "")
         appendNewlinesIfNeeded(2)
-        let styleAttrs = markdownAttributes.attributesForType(.codeBlock)
+        
+        let previousAttributes = currentAttributes
+        var styleAttrs = markdownAttributes.attributesForType(.codeBlock)
+        
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.codeBlock)
+        }
+
         appendToAttrStr(string: codeBlock.code, attrs: styleAttrs)
         
         appendNewlinesIfNeeded(2)
-        MarkdownDebugLog("<close>", file: "")
+        
+        currentAttributes = previousAttributes
+        debugLog("<close>", file: "")
     }
 
     /// NB about lists and SwiftMarkdown: SM considers *each* top level list item a separate list, so you can expect this to be called recursively once for each top level item. (Which yes, makes handling newlines a challenge.)
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
-        MarkdownDebugLog("<open>", file: "")
-        let styleAttrs = markdownAttributes.attributesForType(.unorderedList)
+        guard optionsSupportEl(.unorderedList) else {
+            appendPlainText("\n")
+            debugLog("Skipping unsupported: unorderedList"); return
+        }
+        debugLog("<open>", file: "")
+        var styleAttrs = markdownAttributes.attributesForType(.unorderedList)
         let previousAttributes = currentAttributes
+
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.unorderedList)
+        }
 
         currentAttributes.mergeAttributes(styleAttrs)
 
@@ -169,13 +216,21 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewlinesIfNeeded(2)
         }
 
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitOrderedList(_ orderedList: OrderedList) {
-        MarkdownDebugLog("<open>", file: "")
-        let styleAttrs = markdownAttributes.attributesForType(.orderedList)
+        guard optionsSupportEl(.orderedList) else {
+            appendPlainText("\n")
+            debugLog("Skipping unsupported: orderedList"); return
+        }
+        debugLog("<open>", file: "")
+        var styleAttrs = markdownAttributes.attributesForType(.orderedList)
         let previousAttributes = currentAttributes
+        
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.orderedList)
+        }
 
         currentAttributes.mergeAttributes(styleAttrs)
 
@@ -199,12 +254,16 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewlinesIfNeeded(2)
         }
 
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitListItem(_ listItem: ListItem, index: Int? = nil) {
-        MarkdownDebugLog("<open>", file: "")
-        let styleAttrs = markdownAttributes.attributesForType(.listItem)
+        guard optionsSupportEl(.listItem) else {
+            appendPlainText("\n")
+            debugLog("Skipping unsupported: listItem"); return
+        }
+        debugLog("<open>", file: "")
+        var styleAttrs = markdownAttributes.attributesForType(.listItem)
         let previousAttributes = currentAttributes
 
         currentAttributes.mergeAttributes(styleAttrs)
@@ -219,16 +278,42 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         let indentation = String(repeating: "  ", count: max(0, listItem.listDepth - 1))
 
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.listItem)
+        }
+        currentAttributes.mergeAttributes(styleAttrs)
+        
         appendToAttrStr(string: "\(indentation)\(prefix)")
 
         visitChildren(of: listItem)
 
         currentAttributes = previousAttributes
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitHeading(_ heading: Heading) {
-        MarkdownDebugLog("<open>", file: "")
+        func delimiters(_ level: Int) -> String {
+            return String(repeating: "#", count: level)
+        }
+        
+        guard optionsSupportEl(.heading) else {
+            debugLog("Skipping unsupported: heading")
+
+            // If we really want to preserve headings then we need to add back the delimiters...
+            var str = delimiters(heading.level) + " "
+            if let range = heading.range, range.lowerBound.line > 1 {
+                //  ...and possibly a prefixed newline
+                str = "\n" + str
+            }
+
+            appendPlainText(str)
+            
+            // This will get the actual text + possible <br>s
+            visitChildren(of: heading)
+            
+            return
+        }
+        debugLog("<open>", file: "")
 
         let previousAttributes = currentAttributes
 
@@ -247,6 +332,11 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         styleAttrs[.font] = headingFont
         
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.heading)
+            styleAttrs.addMarkdownParameter("headingLevel", heading.level)
+        }
+        
         currentAttributes.mergeAttributes(styleAttrs)
 
         if attributedString.length > 0 { // don't add newlines at the very beginning
@@ -256,15 +346,22 @@ struct AttributedStringVisitor: MarkupVisitor {
         appendNewlinesIfNeeded(2)
 
         currentAttributes = previousAttributes
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitLink(_ link: Link) {
-        MarkdownDebugLog("<open>", file: "")
+        guard optionsSupportEl(.link) else {
+            appendPlainText(link.plainText)
+            debugLog("Skipping unsupported: link"); return
+        }
+        debugLog("<open>", file: "")
 
         var styleAttrs = markdownAttributes.attributesForType(.link)
 
         if let url = link.destination {
+            if shuldAddCustomAttr {
+                styleAttrs.addMarkdownElementType(.link)
+            }
             styleAttrs[.link] = URL(string: url)
         }
 
@@ -275,21 +372,31 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         currentAttributes = previousAttributes
 
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
-        MarkdownDebugLog("<open>", file: "")
-        visitWithTemporaryAttributes(markdownAttributes.styleAttributes[.strikethrough] ?? markdownAttributes.baseAttributes, strikethrough)
-        MarkdownDebugLog("<close>", file: "")
+        guard optionsSupportEl(.strikethrough) else {
+            appendPlainText(strikethrough.plainText)
+            debugLog("Skipping unsupported: strikethrough"); return
+        }
+        debugLog("<open>", file: "")
+        
+        var styleAttrs = markdownAttributes.styleAttributes[.strikethrough] ?? markdownAttributes.baseAttributes
+        if shuldAddCustomAttr {
+            styleAttrs.addMarkdownElementType(.codeBlock)
+        }
+
+        visitWithTemporaryAttributes(styleAttrs, strikethrough)
+        debugLog("<close>", file: "")
     }
     
     private mutating func visitChildren(of markup: Markup) {
-        MarkdownDebugLog("<open>", file: "")
+        debugLog("<open>", file: "")
         for child in markup.children {
             visit(child)
         }
-        MarkdownDebugLog("<close>", file: "")
+        debugLog("<close>", file: "")
     }
 
     private mutating func visitWithTemporaryAttributes(
@@ -310,6 +417,10 @@ struct AttributedStringVisitor: MarkupVisitor {
         let previousAttributes = currentAttributes
         var mergedAttributes = currentAttributes
         mergedAttributes.mergeAttributes(newAttributes) // Merge general attributes
+        
+        if shuldAddCustomAttr {
+            mergedAttributes.addMarkdownElementType(markupType)
+        }
 
         if let expectedFont = markdownAttributes.fontAttributeForType(markupType) as? CocoaFont,
            let currentFont = currentAttributes[.font] as? CocoaFont {
@@ -356,7 +467,7 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     private mutating func appendToAttrStr(string: String, attrs: StringAttrs? = nil) {
         let actualAtts = attrs ?? currentAttributes
-        MarkdownDebugLog("Appending:\n\(string)", file: "")
+        debugLog("Appending:\n\(string)", file: "")
         attributedString.append(NSAttributedString(string: string, attributes: actualAtts))
     }
     
@@ -368,9 +479,28 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         if newlinesToAppend > 0 {
             let newlines = String(repeating: "\n", count: newlinesToAppend)
-            MarkdownDebugLog("Manually appending \(newlinesToAppend) newlines to reach \(count) total", file: "")
+            debugLog("Manually appending \(newlinesToAppend) newlines to reach \(count) total", file: "")
             attributedString.append(NSAttributedString(string: newlines))
         }
+    }
+    
+    private func appendPlainText(_ plainText: String) {
+        attributedString.append(NSAttributedString(
+            string: plainText,
+            attributes: markdownAttributes.baseAttributes))
+    }
+
+    private func debugLog(_ message: String, file: String = #file, line: Int = #line, function: String = #function) {
+        if self.formattingOptions?.debugLogging ?? false {
+            loggingQ.async {
+                MarkdownDebugLog(message, file: file, line: line, function: function)
+            }
+        }
+    }
+    
+    private func optionsSupportEl(_ elType: MarkupType) -> Bool {
+        guard let formattingOptions else { return true }
+        return formattingOptions.supportedElementTypes.contains(elType)
     }
 }
 

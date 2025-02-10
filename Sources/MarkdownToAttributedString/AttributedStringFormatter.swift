@@ -14,7 +14,9 @@ import Foundation
 ///
 public class AttributedStringFormatter {
     
-    private var attrStringVisitor: AttributedStringVisitor
+    public var options: FormattingOptions?
+
+    private var attributes: MarkdownAttributes?
     
     /// Initialize the formatter with a Markdown string and optional styling attributes.
     ///
@@ -22,12 +24,11 @@ public class AttributedStringFormatter {
     ///   - markdown: The Markdown content to be converted.
     ///   - attributes: An optional `MarkdownAttributes` object defining styles for the formatted output.
     public init(
-        markdown: String,
-        attributes: MarkdownAttributes? = nil)
+        attributes: MarkdownAttributes? = nil,
+        options: FormattingOptions? = nil)
     {
-        self.attrStringVisitor = AttributedStringVisitor(
-            markdown: markdown,
-            attributes: attributes)
+        self.attributes = attributes
+        self.options = options
     }
 
     /// Immediately converts a Markdown string into an `NSAttributedString` with the given styling attributes.
@@ -38,18 +39,27 @@ public class AttributedStringFormatter {
     /// - Returns: An `NSAttributedString` representing the formatted Markdown content.
     public static func format(
         markdown: String,
-        attributes: MarkdownAttributes? = nil) -> NSAttributedString
+        attributes: MarkdownAttributes? = nil,
+        options: FormattingOptions? = nil) -> NSAttributedString
     {
         let asf = AttributedStringFormatter(
-            markdown: markdown,
-            attributes: attributes)
-        return asf.format()
+            attributes: attributes,
+            options: options)
+        return asf.format(markdown: markdown)
     }
     
     /// Converts the given Markdown content into an `NSAttributedString`.
     ///
+    /// - Parameters:
+    ///   - markdown: The Markdown content to be converted.
+    ///
     /// - Returns: An `NSAttributedString` representing the formatted Markdown content.
-    public func format() -> NSAttributedString {
-        return attrStringVisitor.convert()
+    public func format(markdown: String) -> NSAttributedString {
+        var asv = AttributedStringVisitor(
+            markdown: markdown,
+            attributes: attributes,
+            options: options)
+        
+        return asv.convert()
     }
 }
