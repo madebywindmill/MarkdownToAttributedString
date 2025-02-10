@@ -62,7 +62,7 @@ public extension StringAttrs {
         return attr.includesType(elementType)
     }
     
-    func MarkdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {
+    func markdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {
         guard let attr = self[.markdownElement] as? MarkdownElementAttribute else {
             return nil
         }
