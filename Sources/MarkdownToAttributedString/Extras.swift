@@ -23,7 +23,7 @@ public extension NSAttributedString {
             }
             
             if let markdownEls = nextStr.attribute(.markdownElements, at: 0, effectiveRange: nil) as? MarkdownElementAttributes {
-                for (_, val) in markdownEls {
+                for (_, val) in markdownEls.allAttributes {
                     str += val.betterDescriptionMarker
                 }
             }

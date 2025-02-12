@@ -37,6 +37,16 @@ struct AttributedStringVisitor: MarkupVisitor {
         debugLog("Raw markdown to process:\n\(markdown)\n")
         let document = Document(parsing: markdown)
         visit(document)
+        
+        // Apparently something in SwiftMarkdown is sometimes adding a non-breakable space at the end. Remove it.
+        if attributedString.string.hasSuffix("\u{200B}") {
+            attributedString.deleteCharacters(in: NSRange(location: attributedString.length - 1, length: 1))
+        }
+        
+        // Ensure the output ends in a newline otherwise trailing newlines in the input get ignored.
+        if attributedString.length > 0 && !attributedString.string.hasSuffix("\n") {
+            appendNewline()
+        }
         debugLog("Final plain text:\n\(attributedString.string)\n\n")
         debugLog("Final text+attrs:\n\(attributedString.betterDescription)")
         return attributedString
@@ -48,6 +58,7 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitText(_ text: Text) {
         debugLog("<open>", file: "")
+        debugLog("appending: \(text.string)")
         appendToAttrStr(string: text.string)
         debugLog("<close>", file: "")
     }
@@ -78,17 +89,11 @@ struct AttributedStringVisitor: MarkupVisitor {
     mutating func visitParagraph(_ paragraph: Paragraph) {
         debugLog("<open>", file: "")
 
-        let isInListItem = paragraph.parent is ListItem
-
-        // don't add newlines at the start of file or if in a list
-        // (seems like a bug that the parser opens a paragraph _within_ the list item?)
-        if !isInListItem
-            && attributedString.length > 0
-        {
+        visitChildren(of: paragraph)
+        
+        if paragraph.hasSuccessor {
             appendNewline()
         }
-
-        visitChildren(of: paragraph)
 
         debugLog("<close>", file: "")
     }
@@ -179,6 +184,11 @@ struct AttributedStringVisitor: MarkupVisitor {
         appendToAttrStr(string: codeBlock.code, attrs: styleAttrs)
                 
         currentAttributes = previousAttributes
+        
+        if codeBlock.hasSuccessor {
+            appendNewline()
+        }
+        
         debugLog("<close>", file: "")
     }
 
@@ -201,17 +211,16 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         currentAttributes.mergeAttributes(styleAttrs)
 
-        if !(unorderedList.parent is ListItem) && !unorderedList.isFirstLine {
-            appendNewline()
-        }
-
         for child in unorderedList.children {
             if let listItem = child as? ListItem {
                 visitListItem(listItem)
-                appendNewline()
             } else {
                 visit(child)
             }
+        }
+        
+        if unorderedList.hasSuccessor {
+            appendNewline()
         }
 
         currentAttributes = previousAttributes
@@ -268,23 +277,27 @@ struct AttributedStringVisitor: MarkupVisitor {
             prefix = "\(index). "
         } else {
             let bullets = ["•", "◦", "▪", "▫"]
-            prefix = bullets[listItem.listDepth % bullets.count] + " "
+            let tabs = String(repeating: "\t", count: listItem.listDepth + 1)
+            prefix = tabs + bullets[listItem.listDepth % bullets.count] + " "
         }
 
-        let indentation = String(repeating: "  ", count: listItem.listDepth)
-
-        if shouldAddCustomAttr
-            && listItem.rangeWithinLine.location - listItem.listDepth == 0
-        {
+        if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
-                MarkdownElementAttribute(elementType: .listItem)
+                ListItemMarkdownElementAttribute(
+                    listDepth: listItem.listDepth,
+                    indexInParent: listItem.indexInParent,
+                    prefix: prefix)
             )
         }
         currentAttributes.mergeAttributes(styleAttrs)
         
-        appendToAttrStr(string: "\(indentation)\(prefix)")
+        appendToAttrStr(string: "\(prefix)")
 
         visitChildren(of: listItem)
+        
+        if listItem.hasSuccessor {
+            appendNewline()
+        }
 
         currentAttributes = previousAttributes
         debugLog("<close>", file: "")
@@ -339,10 +352,11 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         currentAttributes.mergeAttributes(styleAttrs)
 
-        if attributedString.length > 0 { // don't add newlines at the very beginning
-            appendNewlinesIfNeeded(1)
-        }
         visitChildren(of: heading)
+        
+        if heading.hasSuccessor {
+            appendNewline()
+        }
 
         currentAttributes = previousAttributes
         debugLog("<close>", file: "")
@@ -480,25 +494,10 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
     
     private mutating func appendNewline() {
-        debugLog("Manually appending newline")
+        debugLog("appending newline")
         appendPlainText("\n")
     }
-    
-    private mutating func appendNewlinesIfNeeded(_ count: Int) {
-        let currentString = attributedString.string
-        let newlineCount = currentString.reversed().prefix(while: { $0 == "\n" }).count
-
-        let newlinesToAppend = count - newlineCount
-
-        if newlinesToAppend > 0 {
-            let newlines = String(repeating: "\n", count: newlinesToAppend)
-            debugLog("Manually appending \(newlinesToAppend) newlines to reach \(count) total", file: "")
-            attributedString.append(NSAttributedString(
-                string: newlines,
-                attributes: markdownAttributes.baseAttributes))
-        }
-    }
-    
+        
     private func appendPlainText(_ plainText: String) {
         attributedString.append(NSAttributedString(
             string: plainText,
@@ -507,7 +506,7 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     private func debugLog(_ message: String, file: String = #file, line: Int = #line, function: String = #function) {
         if self.formattingOptions?.debugLogging ?? false {
-            loggingQ.async {
+            loggingQ.sync {
                 MarkdownDebugLog(message, file: file, line: line, function: function)
             }
         }
@@ -541,6 +540,11 @@ extension Markup {
         return range.lowerBound.line == 1
     }
     
+    var hasSuccessor: Bool {
+        guard let childCount = parent?.childCount else { return false }
+        return indexInParent < childCount - 1
+    }
+
     var rangeWithinLine: NSRange {
         guard let range else { return NSRange(location: NSNotFound, length: 0) }
         let start = range.lowerBound.column - 1
@@ -553,11 +557,12 @@ extension StringAttrs {
     mutating func mergeAttributes(_ otherAttrs: StringAttrs) {
         for (key, val) in otherAttrs {
             if key == .markdownElements, let val = val as? MarkdownElementAttributes {
-                var attrs = self[.markdownElements] as? MarkdownElementAttributes
-                    ?? MarkdownElementAttributes()
+                var attrs = (self[.markdownElements] as? MarkdownElementAttributes)?.copy() as? MarkdownElementAttributes ?? MarkdownElementAttributes()
                 
-                attrs.merge(val) { (_, new) in new }
-                
+                for (markupType, newAttribute) in val.allAttributes {
+                    attrs.set(markupType, value: newAttribute)
+                }
+
                 self[.markdownElements] = attrs
             } else {
                 self[key] = val
