@@ -8,14 +8,6 @@
 import Foundation
 
 public extension NSAttributedString {
-    var wholeRange: NSRange {
-        return NSRange(location: 0, length: self.length)
-    }
-    
-    var nsString: NSString {
-        return self.string as NSString
-    }
-
     // wip
     var betterDescription: String {
         var returnStr = ""
@@ -30,11 +22,9 @@ public extension NSAttributedString {
                 str += "<Font name=“\(font.compatibleDisplayName)”>"
             }
             
-            if let markdownEl = nextStr.attribute(.markdownElement, at: 0, effectiveRange: nil) as? MarkdownElementAttribute {
-                for t in MarkupType.allCases {
-                    if markdownEl.includesType(t) {
-                        str += t.descriptionMarker
-                    }
+            if let markdownEls = nextStr.attribute(.markdownElements, at: 0, effectiveRange: nil) as? MarkdownElementAttributes {
+                for (_, val) in markdownEls {
+                    str += val.betterDescriptionMarker
                 }
             }
             
@@ -46,6 +36,10 @@ public extension NSAttributedString {
         return returnStr
     }
     
+    private var wholeRange: NSRange {
+        return NSRange(location: 0, length: self.length)
+    }
+
     func hasAttribute(key: NSAttributedString.Key, at location: Int) -> Bool {
         guard location < string.length else {
             return false

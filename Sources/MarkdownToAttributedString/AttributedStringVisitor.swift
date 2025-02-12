@@ -19,7 +19,7 @@ struct AttributedStringVisitor: MarkupVisitor {
     private var attributedString = NSMutableAttributedString()
     private var currentAttributes: StringAttrs
     private var formattingOptions: FormattingOptions?
-    private var shuldAddCustomAttr: Bool {
+    private var shouldAddCustomAttr: Bool {
         return formattingOptions?.addCustomMarkdownElementAttributes ?? false
     }
     private let loggingQ = DispatchQueue(label: "MTAS.logging")
@@ -37,8 +37,8 @@ struct AttributedStringVisitor: MarkupVisitor {
         debugLog("Raw markdown to process:\n\(markdown)\n")
         let document = Document(parsing: markdown)
         visit(document)
-        debugLog("Final plain text render:\n\(attributedString.string)\n\n")
-        debugLog("Final text+attrs:\n\(attributedString.debugDescription)")
+        debugLog("Final plain text:\n\(attributedString.string)\n\n")
+        debugLog("Final text+attrs:\n\(attributedString.betterDescription)")
         return attributedString
     }
 
@@ -80,18 +80,15 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         let isInListItem = paragraph.parent is ListItem
 
+        // don't add newlines at the start of file or if in a list
+        // (seems like a bug that the parser opens a paragraph _within_ the list item?)
         if !isInListItem
-            && attributedString.length > 0 // don't add newlines at the very beginning
+            && attributedString.length > 0
         {
-            appendNewlinesIfNeeded(1)
+            appendNewline()
         }
 
         visitChildren(of: paragraph)
-
-        // *do* add newlines within the list
-        if isInListItem {
-            appendNewlinesIfNeeded(1)
-        }
 
         debugLog("<close>", file: "")
     }
@@ -130,9 +127,11 @@ struct AttributedStringVisitor: MarkupVisitor {
         while let parent = currentParent {
             if parent is Strong {
                 if let baseFont = styleAttrs[.font] as? CocoaFont {
-                    if shuldAddCustomAttr {
+                    if shouldAddCustomAttr {
                         
-                        styleAttrs.addMarkdownElementType(.strong)
+                        styleAttrs.addMarkdownElementAttr(
+                            MarkdownElementAttribute(elementType: .strong)
+                        )
                     }
 #if os(iOS) || os(watchOS)
                     styleAttrs[.font] = CocoaFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.traitBold) ?? baseFont.fontDescriptor, size: baseFont.pointSize)
@@ -142,8 +141,10 @@ struct AttributedStringVisitor: MarkupVisitor {
                 }
             } else if parent is Emphasis {
                 if let baseFont = styleAttrs[.font] as? CocoaFont {
-                    if shuldAddCustomAttr {
-                        styleAttrs.addMarkdownElementType(.emphasis)
+                    if shouldAddCustomAttr {
+                        styleAttrs.addMarkdownElementAttr(
+                            MarkdownElementAttribute(elementType: .emphasis)
+                        )
                     }
 #if os(iOS) || os(watchOS)
                     styleAttrs[.font] = CocoaFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.traitItalic) ?? baseFont.fontDescriptor, size: baseFont.pointSize)
@@ -165,19 +166,18 @@ struct AttributedStringVisitor: MarkupVisitor {
             debugLog("Skipping unsupported: codeBlock"); return
         }
         debugLog("<open>", file: "")
-        appendNewlinesIfNeeded(2)
         
         let previousAttributes = currentAttributes
         var styleAttrs = markdownAttributes.attributesForType(.codeBlock)
         
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.codeBlock)
+        if shouldAddCustomAttr {
+            styleAttrs.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: .codeBlock)
+            )
         }
 
         appendToAttrStr(string: codeBlock.code, attrs: styleAttrs)
-        
-        appendNewlinesIfNeeded(2)
-        
+                
         currentAttributes = previousAttributes
         debugLog("<close>", file: "")
     }
@@ -189,32 +189,32 @@ struct AttributedStringVisitor: MarkupVisitor {
             debugLog("Skipping unsupported: unorderedList"); return
         }
         debugLog("<open>", file: "")
+        
         var styleAttrs = markdownAttributes.attributesForType(.unorderedList)
         let previousAttributes = currentAttributes
 
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.unorderedList)
+        if shouldAddCustomAttr {
+            styleAttrs.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: .unorderedList)
+            )
         }
 
         currentAttributes.mergeAttributes(styleAttrs)
 
-        if !(unorderedList.parent is ListItem) {
-            appendNewlinesIfNeeded(2)
+        if !(unorderedList.parent is ListItem) && !unorderedList.isFirstLine {
+            appendNewline()
         }
 
         for child in unorderedList.children {
             if let listItem = child as? ListItem {
                 visitListItem(listItem)
+                appendNewline()
             } else {
                 visit(child)
             }
         }
 
         currentAttributes = previousAttributes
-
-        if !(unorderedList.parent is ListItem) {
-            appendNewlinesIfNeeded(2)
-        }
 
         debugLog("<close>", file: "")
     }
@@ -228,15 +228,13 @@ struct AttributedStringVisitor: MarkupVisitor {
         var styleAttrs = markdownAttributes.attributesForType(.orderedList)
         let previousAttributes = currentAttributes
         
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.orderedList)
+        if shouldAddCustomAttr {
+            styleAttrs.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: .orderedList)
+            )
         }
 
         currentAttributes.mergeAttributes(styleAttrs)
-
-        if !(orderedList.parent is ListItem) {
-            appendNewlinesIfNeeded(2)
-        }
 
         var itemIndex = 1
         for child in orderedList.children {
@@ -250,12 +248,9 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         currentAttributes = previousAttributes
 
-        if !(orderedList.parent is ListItem) {
-            appendNewlinesIfNeeded(2)
-        }
-
         debugLog("<close>", file: "")
     }
+    
 
     mutating func visitListItem(_ listItem: ListItem, index: Int? = nil) {
         guard optionsSupportEl(.listItem) else {
@@ -273,13 +268,17 @@ struct AttributedStringVisitor: MarkupVisitor {
             prefix = "\(index). "
         } else {
             let bullets = ["•", "◦", "▪", "▫"]
-            prefix = bullets[(listItem.listDepth - 1) % bullets.count] + " "
+            prefix = bullets[listItem.listDepth % bullets.count] + " "
         }
 
-        let indentation = String(repeating: "  ", count: max(0, listItem.listDepth - 1))
+        let indentation = String(repeating: "  ", count: listItem.listDepth)
 
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.listItem)
+        if shouldAddCustomAttr
+            && listItem.rangeWithinLine.location - listItem.listDepth == 0
+        {
+            styleAttrs.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: .listItem)
+            )
         }
         currentAttributes.mergeAttributes(styleAttrs)
         
@@ -332,18 +331,18 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         styleAttrs[.font] = headingFont
         
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.heading)
-            styleAttrs.addMarkdownParameter("headingLevel", heading.level)
+        if shouldAddCustomAttr {
+            styleAttrs.addMarkdownElementAttr(
+                HeadingMarkdownElementAttribute(level: heading.level)
+            )
         }
         
         currentAttributes.mergeAttributes(styleAttrs)
 
         if attributedString.length > 0 { // don't add newlines at the very beginning
-            appendNewlinesIfNeeded(2)
+            appendNewlinesIfNeeded(1)
         }
         visitChildren(of: heading)
-        appendNewlinesIfNeeded(2)
 
         currentAttributes = previousAttributes
         debugLog("<close>", file: "")
@@ -358,11 +357,16 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         var styleAttrs = markdownAttributes.attributesForType(.link)
 
-        if let url = link.destination {
-            if shuldAddCustomAttr {
-                styleAttrs.addMarkdownElementType(.link)
+        if let urlstr = link.destination {
+            guard let url = URL(string: urlstr) else {
+                assertionFailure("Invalid URL string \(urlstr)"); return
             }
-            styleAttrs[.link] = URL(string: url)
+            if shouldAddCustomAttr {
+                styleAttrs.addMarkdownElementAttr(
+                    LinkMarkdownElementAttribute(url: url)
+                )
+            }
+            styleAttrs[.link] = url
         }
 
         let previousAttributes = currentAttributes
@@ -383,8 +387,10 @@ struct AttributedStringVisitor: MarkupVisitor {
         debugLog("<open>", file: "")
         
         var styleAttrs = markdownAttributes.styleAttributes[.strikethrough] ?? markdownAttributes.baseAttributes
-        if shuldAddCustomAttr {
-            styleAttrs.addMarkdownElementType(.codeBlock)
+        if shouldAddCustomAttr {
+            styleAttrs.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: .strikethrough)
+            )
         }
 
         visitWithTemporaryAttributes(styleAttrs, strikethrough)
@@ -418,8 +424,10 @@ struct AttributedStringVisitor: MarkupVisitor {
         var mergedAttributes = currentAttributes
         mergedAttributes.mergeAttributes(newAttributes) // Merge general attributes
         
-        if shuldAddCustomAttr {
-            mergedAttributes.addMarkdownElementType(markupType)
+        if shouldAddCustomAttr {
+            mergedAttributes.addMarkdownElementAttr(
+                MarkdownElementAttribute(elementType: markupType)
+            )
         }
 
         if let expectedFont = markdownAttributes.fontAttributeForType(markupType) as? CocoaFont,
@@ -466,9 +474,14 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
 
     private mutating func appendToAttrStr(string: String, attrs: StringAttrs? = nil) {
-        let actualAtts = attrs ?? currentAttributes
+        let actualAttrs = attrs ?? currentAttributes
         debugLog("Appending:\n\(string)", file: "")
-        attributedString.append(NSAttributedString(string: string, attributes: actualAtts))
+        attributedString.append(NSAttributedString(string: string, attributes: actualAttrs))
+    }
+    
+    private mutating func appendNewline() {
+        debugLog("Manually appending newline")
+        appendPlainText("\n")
     }
     
     private mutating func appendNewlinesIfNeeded(_ count: Int) {
@@ -507,6 +520,8 @@ struct AttributedStringVisitor: MarkupVisitor {
 }
 
 extension ListItem {
+    
+    // Nesting depth of the list item; 0 indexed.
     var listDepth: Int {
         var depth = 0
         var current: Markup? = self
@@ -516,6 +531,37 @@ extension ListItem {
             }
             current = parent
         }
-        return max(1, depth)
+        return max(0, depth - 1)
+    }
+}
+
+extension Markup {
+    var isFirstLine: Bool {
+        guard let range else { return false }
+        return range.lowerBound.line == 1
+    }
+    
+    var rangeWithinLine: NSRange {
+        guard let range else { return NSRange(location: NSNotFound, length: 0) }
+        let start = range.lowerBound.column - 1
+        return NSRange(location: start,
+                       length: range.upperBound.column - start - 1)
+    }
+}
+
+extension StringAttrs {
+    mutating func mergeAttributes(_ otherAttrs: StringAttrs) {
+        for (key, val) in otherAttrs {
+            if key == .markdownElements, let val = val as? MarkdownElementAttributes {
+                var attrs = self[.markdownElements] as? MarkdownElementAttributes
+                    ?? MarkdownElementAttributes()
+                
+                attrs.merge(val) { (_, new) in new }
+                
+                self[.markdownElements] = attrs
+            } else {
+                self[key] = val
+            }
+        }
     }
 }

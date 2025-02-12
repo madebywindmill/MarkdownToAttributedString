@@ -10,14 +10,6 @@ import Markdown
 
 public typealias StringAttrs = [NSAttributedString.Key: Any]
 
-extension StringAttrs {
-    mutating func mergeAttributes(_ otherAttrs: StringAttrs) {
-        for (key, val) in otherAttrs {
-            self[key] = val
-        }
-    }
-}
-
 /// MarkupType, since `Markup` itself isn't hashable.
 public enum MarkupType: Hashable, CaseIterable {
     case strong
@@ -36,34 +28,7 @@ public enum MarkupType: Hashable, CaseIterable {
 public extension MarkupType {
     static var all: [MarkupType] {
         return Self.allCases
-    }
-    
-    var descriptionMarker: String {
-        switch self {
-            case .strong:
-                return "<Strong>"
-            case .emphasis:
-                return "<Emphasis>"
-            case .strikethrough:
-                return "<Strikethrough>"
-            case .inlineCode:
-                return "<InlineCode>"
-            case .codeBlock:
-                return "<CodeBlock>"
-            case .heading:
-                return "<Heading>"
-            case .unorderedList:
-                return "<UnorderedList>"
-            case .orderedList:
-                return "<OrderedList>"
-            case .listItem:
-                return "<ListItem>"
-            case .link:
-                return "<Link>"
-            case .unknown:
-                return "<Unknown>"
-        }
-    }
+    }    
 }
 
 extension Markup {

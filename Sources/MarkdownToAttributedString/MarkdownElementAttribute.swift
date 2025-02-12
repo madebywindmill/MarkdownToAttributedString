@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Markdown
 
 /// **Experimental**
 ///
@@ -13,72 +14,104 @@ import Foundation
 ///
 /// Custom markdown element attributes allow fully invertible conversions because they specifically mark the source markdown in the NSAttributedString.
 ///
-/// When present, the key is `NSAttributedString.Key.MTASMarkdownElement` and the value is an `MarkdownElementAttribute` instance.
-public struct MarkdownElementAttribute {
-    public var elementTypes = [MarkupType]()
-    public var parameters = Dictionary<AnyHashable, AnyHashable>()
+/// When present, the key is `NSAttributedString.Key.MTASMarkdownElements` and the value is a MarkdownElementAttributes dictionary.
+open class MarkdownElementAttribute: Equatable {
+    public var elementType: MarkupType
+    public var associatedMarkup: Markup?
     
-    public init(elementTypes: [MarkupType] = [MarkupType](),
-                parameters: Dictionary<AnyHashable, AnyHashable> = Dictionary<AnyHashable, AnyHashable>()) {
-        self.elementTypes = elementTypes
-        self.parameters = parameters
+    public static func == (lhs: MarkdownElementAttribute, rhs: MarkdownElementAttribute) -> Bool {
+        // NB: `Markup` is not Equatable.
+        return lhs.elementType == rhs.elementType
+    }
+
+    public init(elementType: MarkupType,
+                associtatedMarkup: Markup? = nil) {
+        self.elementType = elementType
+        self.associatedMarkup = associtatedMarkup
     }
     
-    public init(elementType: MarkupType) {
-        self.init(elementTypes: [elementType])
-    }
-    
-    mutating func addElementType(_ elementType: MarkupType) {
-        elementTypes.append(elementType)
-    }
-    
-    mutating func addParameter(_ name: String, _ value: AnyHashable) {
-        parameters[name] = value
-    }
-    
-    public func includesType(_ elementType: MarkupType) -> Bool {
-        return elementTypes.contains(elementType)
+    public var betterDescriptionMarker: String {
+        switch elementType {
+            case .strong:
+                return "<Strong>"
+            case .emphasis:
+                return "<Emphasis>"
+            case .strikethrough:
+                return "<Strikethrough>"
+            case .inlineCode:
+                return "<InlineCode>"
+            case .codeBlock:
+                return "<CodeBlock>"
+            case .heading:
+                assertionFailure() // should be a HeadingMarkdownElementAttribute
+                return "<Heading>"
+            case .unorderedList:
+                return "<UnorderedList>"
+            case .orderedList:
+                return "<OrderedList>"
+            case .listItem:
+                return "<ListItem>"
+            case .link:
+                assertionFailure() // should be a LinkMarkdownElementAttribute
+                return "<Link>"
+            case .unknown:
+                return "<Unknown>"
+
+        }
     }
 }
+
+public class HeadingMarkdownElementAttribute: MarkdownElementAttribute {
+    public var level: Int
+    
+    public init(level: Int) {
+        self.level = level
+        super.init(elementType: .heading)
+    }
+    
+    public override var betterDescriptionMarker: String {
+        return "<Heading level=\(level)>"
+    }
+
+}
+
+public class LinkMarkdownElementAttribute: MarkdownElementAttribute {
+    public var url: URL
+    
+    public init(url: URL) {
+        self.url = url
+        super.init(elementType: .link)
+    }
+    
+    public override var betterDescriptionMarker: String {
+        return "<Link url=\(url.absoluteURL)>"
+    }
+}
+
 
 /// See `FormattingOptions.addCustomMarkdownElementAttributes`.
 public extension NSAttributedString.Key {
-    static let markdownElement: NSAttributedString.Key = .init("MTASMarkdownElement")
+    static let markdownElements: NSAttributedString.Key = .init("MTASMarkdownElements")
 }
 
+public typealias MarkdownElementAttributes = Dictionary<MarkupType, MarkdownElementAttribute>
+
 public extension StringAttrs {
-    var hasMarkdownElementAttr: Bool {
-        return self[.markdownElement] != nil
+    var hasMTASMarkdownElements: Bool {
+        return self[.markdownElements] != nil
     }
-    
-    func getMarkdownElementAttribute() -> MarkdownElementAttribute? {
-        return self[.markdownElement] as? MarkdownElementAttribute
-    }
-    
-    func hasMarkdownElementType(_ elementType: MarkupType) -> Bool {
-        guard let attr = self[.markdownElement] as? MarkdownElementAttribute else {
-            return false
-        }
-        return attr.includesType(elementType)
-    }
-    
+            
     func markdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {
-        guard let attr = self[.markdownElement] as? MarkdownElementAttribute else {
+        guard let val = self[.markdownElements] as? MarkdownElementAttributes else {
             return nil
         }
-        return attr.includesType(elementType) ? attr : nil
+        return val[elementType]
     }
     
-    mutating func addMarkdownElementType(_ elementType: MarkupType) {
-        var attr = self[.markdownElement] as? MarkdownElementAttribute ?? MarkdownElementAttribute()
-        attr.addElementType(elementType)
-        self[.markdownElement] = attr
+    mutating func addMarkdownElementAttr(_ attr: MarkdownElementAttribute) {
+        var d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
+        d[attr.elementType] = attr
+        self[.markdownElements] = d
     }
-    
-    mutating func addMarkdownParameter(_ name: String, _ value: AnyHashable) {
-        var attr = self[.markdownElement] as? MarkdownElementAttribute ?? MarkdownElementAttribute()
-        attr.addParameter(name, value)
-        self[.markdownElement] = attr
-    }
-    
+
 }

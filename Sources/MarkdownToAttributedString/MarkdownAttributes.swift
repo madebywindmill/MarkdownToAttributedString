@@ -90,8 +90,10 @@ public extension MarkdownAttributes {
                     .foregroundColor: CocoaColor.lightGray,
                     .paragraphStyle: indentedPStyle
                 ],
-                .listItem: [.font: CocoaFont.monospacedFont(ofSize: 13, weight: .regular),
-                            .foregroundColor: CocoaColor.lightGray],
+                .listItem: [
+                    .font: CocoaFont.monospacedFont(ofSize: 13, weight: .regular),
+                    .foregroundColor: CocoaColor.lightGray
+                ],
                 .heading: [
                     .paragraphStyle: indentedPStyle
                 ],
