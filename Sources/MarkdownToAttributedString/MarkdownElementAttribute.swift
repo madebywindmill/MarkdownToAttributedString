@@ -108,6 +108,10 @@ public extension StringAttrs {
         return val[elementType]
     }
     
+    func hasMarkdownElementType(_ elementType: MarkupType) -> Bool {
+        return markdownElementAttrForElementType(elementType) != nil
+    }
+    
     mutating func addMarkdownElementAttr(_ attr: MarkdownElementAttribute) {
         var d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
         d[attr.elementType] = attr
