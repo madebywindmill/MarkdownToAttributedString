@@ -24,10 +24,13 @@ import Markdown
 ///   - headingPointSizes: An array of `CGFloat` values specifying font sizes for headings. The first value applies
 ///     to level 1 headings (`#`), the second to level 2 headings (`##`), and so on. If there are fewer values than
 ///     heading levels, the last size in the array is reused for remaining levels.
+///
+///   - unorderedListBullets: An array of "bullet" strings to be used for unordered lists. The index of the array = the indentation of the list item, wrapping back to the 1st if the indentation > array.count.
 public struct MarkdownStyles {
     public var baseAttributes: StringAttrs
     public var styleAttributes: [MarkupType: StringAttrs]
     public var headingPointSizes: [CGFloat] = [22, 18, 15, 14, 13, 11]
+    public var unorderedListBullets: [String] = ["•", "◦", "▪", "▫"]
 
     public init(baseAttributes: StringAttrs, styleAttributes: [MarkupType : StringAttrs]) {
         self.baseAttributes = baseAttributes

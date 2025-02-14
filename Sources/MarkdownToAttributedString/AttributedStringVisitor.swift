@@ -278,9 +278,9 @@ struct AttributedStringVisitor: MarkupVisitor {
         let renderedDelimiter: String
         if let index = index {
             prefix = "\(index). "
-            renderedDelimiter = "•"
+            renderedDelimiter = markdownStyles.unorderedListBullets[0]
         } else {
-            let bullets = ["•", "◦", "▪", "▫"]
+            let bullets = markdownStyles.unorderedListBullets
             renderedDelimiter = bullets[listItem.listDepth % bullets.count]
             let tabs = String(repeating: "\t", count: listItem.listDepth + 1)
             prefix = tabs + renderedDelimiter + " "
