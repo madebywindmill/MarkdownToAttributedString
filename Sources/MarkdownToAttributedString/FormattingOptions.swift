@@ -11,22 +11,32 @@ public struct FormattingOptions {
     
     /// **Experimental**
     ///
-    /// When true, `MarkdownElementAttribute`s are added to the NSAttributedString indicating the source markdown. See the `MarkdownElementAttribute` description for more info.
-    public var addCustomMarkdownElementAttributes = false
+    /// When true, `MarkdownElementAttribute`s are added to the NSAttributedString indicating the source markdown. See the `MarkdownElementAttribute` description for more info. Off by default.
+    public var addCustomMarkdownElementAttributes: Bool
     
-    public var debugLogging = false
+    /// Log a bunch of stuff. Off by default.
+    public var debugLogging: Bool
     
     /// **Experimental**
     ///
     /// When `supportedElementTypes` is a subset of `MarkupType.allCases`, the converter will try to skip any unsupported element types.
     public var supportedElementTypes = MarkupType.allCases
     
+    /// When true, any whitespace at the beginning or end of the formatted attributed string is removed. Off by default.
+    public var trimWhitespace: Bool
+    
     public init(addCustomMarkdownElementAttributes: Bool = false,
                 debugLogging: Bool = false,
-                supportedElementTypes: [MarkupType] = MarkupType.allCases)
+                supportedElementTypes: [MarkupType] = MarkupType.allCases,
+                trimWhitespace: Bool = false)
     {
         self.addCustomMarkdownElementAttributes = addCustomMarkdownElementAttributes
         self.debugLogging = debugLogging
         self.supportedElementTypes = supportedElementTypes
+        self.trimWhitespace = trimWhitespace
+    }
+    
+    public static var `default`: FormattingOptions {
+        return FormattingOptions()
     }
 }

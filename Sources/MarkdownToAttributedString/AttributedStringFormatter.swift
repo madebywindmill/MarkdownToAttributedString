@@ -14,7 +14,7 @@ import Foundation
 ///
 public class AttributedStringFormatter {
     
-    public var options: FormattingOptions?
+    public var options: FormattingOptions
 
     private var attributes: MarkdownAttributes?
     
@@ -25,7 +25,7 @@ public class AttributedStringFormatter {
     ///   - attributes: An optional `MarkdownAttributes` object defining styles for the formatted output.
     public init(
         attributes: MarkdownAttributes? = nil,
-        options: FormattingOptions? = nil)
+        options: FormattingOptions = FormattingOptions.default)
     {
         self.attributes = attributes
         self.options = options
@@ -40,7 +40,7 @@ public class AttributedStringFormatter {
     public static func format(
         markdown: String,
         attributes: MarkdownAttributes? = nil,
-        options: FormattingOptions? = nil) -> NSAttributedString
+        options: FormattingOptions = FormattingOptions.default) -> NSAttributedString
     {
         let asf = AttributedStringFormatter(
             attributes: attributes,
@@ -60,6 +60,34 @@ public class AttributedStringFormatter {
             attributes: attributes,
             options: options)
         
-        return asv.convert()
+        var result = asv.convert()
+        
+        if options.trimWhitespace {
+            // Taking care not to butcher a trailing emoji 😅
+            let nsString = result.string as NSString
+            let nonWhitespace = CharacterSet.whitespacesAndNewlines.inverted
+            
+            let startRange = nsString.rangeOfCharacter(from: nonWhitespace)
+            let endRange = nsString.rangeOfCharacter(from: nonWhitespace, options: .backwards)
+            
+            // If we actually found some non‐whitespace, trim
+            if startRange.location != NSNotFound, endRange.location != NSNotFound {
+                // Expand the start and end to cover full grapheme clusters
+                let startCluster = nsString.rangeOfComposedCharacterSequence(at: startRange.location)
+                let endCluster   = nsString.rangeOfComposedCharacterSequence(at: endRange.location)
+                
+                let newStart = startCluster.location
+                // endCluster.location + endCluster.length gives the first character AFTER the cluster, so subtract 1 to get inclusive end
+                let newEnd = endCluster.location + endCluster.length - 1
+                
+                let trimmedRange = NSRange(location: newStart, length: newEnd - newStart + 1)
+                result = result.attributedSubstring(from: trimmedRange)
+            } else {
+                // The entire string is whitespace
+                return NSAttributedString(string: "", attributes: attributes?.baseAttributes)
+            }
+        }
+
+        return result
     }
 }

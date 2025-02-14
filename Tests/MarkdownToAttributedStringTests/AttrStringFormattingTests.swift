@@ -13,22 +13,36 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     
     static let defaultMDAttrs = MarkdownAttributes.default
     static let options = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true)
+    static let trimWhitespaceOptions = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true, trimWhitespace: true)
     
     var defaultFormatter: AttributedStringFormatter!
+    var trimWhitespaceFormatter: AttributedStringFormatter!
     
     override func setUp() {
         defaultFormatter = AttributedStringFormatter(attributes: Self.defaultMDAttrs, options: Self.options)
+        trimWhitespaceFormatter = AttributedStringFormatter(attributes: Self.defaultMDAttrs, options: Self.trimWhitespaceOptions)
     }
     
     func testBoldText() {
-        let md = "This is **bold** text.\n"
-        let attrStr = defaultFormatter.format(markdown: md)
+        var md = "This is **bold** text.\n"
+        var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "This is bold text.\n")
 
-        let styledRange = (attrStr.string as NSString).range(of: "bold")
-        let attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
-        let font = attributes[.font] as! CocoaFont
-        let expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
+        var styledRange = (attrStr.string as NSString).range(of: "bold")
+        var attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
+        var font = attributes[.font] as! CocoaFont
+        var expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
+        
+        XCTAssertTrue(font.customIsEqual(to: expectedFont))
+
+        md = "This is 😈 **bold 💯** text with 🎈 emoji.\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "This is 😈 bold 💯 text with 🎈 emoji.\n")
+
+        styledRange = (attrStr.string as NSString).range(of: "bold 💯")
+        attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
+        font = attributes[.font] as! CocoaFont
+        expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
         
         XCTAssertTrue(font.customIsEqual(to: expectedFont))
     }
@@ -47,15 +61,35 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     }
     
     func testBoldItalics() {
-        let md = "This has **_both_**.\n"
-        let attrStr = defaultFormatter.format(markdown: md)
+        var md = "This has **_both_**.\n"
+        var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "This has both.\n")
         
-        let styledRange = (attrStr.string as NSString).range(of: "both")
-        let attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
-        let font = attributes[.font] as! CocoaFont
+        var styledRange = (attrStr.string as NSString).range(of: "both")
+        var attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
+        var font = attributes[.font] as! CocoaFont
         XCTAssertTrue(font.containsBoldTrait())
         XCTAssertTrue(font.containsItalicsTrait())
+        XCTAssertTrue(attributes.hasMarkdownElementType(.strong))
+        XCTAssertTrue(attributes.hasMarkdownElementType(.emphasis))
+
+        
+        md = "**bold *nested italics***\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        styledRange = (attrStr.string as NSString).range(of: "bold")
+        attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
+        font = attributes[.font] as! CocoaFont
+        XCTAssertTrue(font.containsBoldTrait())
+        XCTAssertFalse(font.containsItalicsTrait())
+        XCTAssertTrue(attributes.hasMarkdownElementType(.strong))
+        XCTAssertFalse(attributes.hasMarkdownElementType(.emphasis))
+        styledRange = (attrStr.string as NSString).range(of: "nested italics")
+        attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
+        font = attributes[.font] as! CocoaFont
+        XCTAssertTrue(font.containsBoldTrait())
+        XCTAssertTrue(font.containsItalicsTrait())
+        XCTAssertTrue(attributes.hasMarkdownElementType(.strong))
+        XCTAssertTrue(attributes.hasMarkdownElementType(.emphasis))
     }
     
     func testInlineCode() {
@@ -69,8 +103,8 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     }
     
     func testNestedInlineCode() {
-        let md = "Here is **`nested inline code`**."
-        let attrStr = defaultFormatter.format(markdown: md)
+        var md = "Here is **`nested inline code`**."
+        var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertTrue(attrStr.string.contains("nested inline code"))
         
         let styledRange = (attrStr.string as NSString).range(of: "nested inline code")
@@ -160,9 +194,9 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssert(attrStr.fontAt(location: 13)!.hasItalic)
         XCTAssert(attrStr.fontAt(location: 18)!.hasItalic)
 
-        md = "- li1\n  - li1.1\n"
+        md = "* li1\n  * li1.1\n"
         attrStr = defaultFormatter.format(markdown: md)
-        var listItemAttr = attrStr.attributes(at: 0, effectiveRange: nil).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
+        var listItemAttr = attrStr.startingAttrs.markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
         XCTAssertEqual(listItemAttr.prefix, "\t• ")
         XCTAssertEqual(listItemAttr.listDepth, 0)
         listItemAttr = attrStr.attributes(at: 7, effectiveRange: nil).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
@@ -178,6 +212,42 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 \t• li1
 \t\t◦ li1.1\n
 """)
+
+        // According to spec, the "foo" is actually part of the list. In fact it's part of the _first list item_. But our parser doesn't handle that to spec because for external compatibility reasons we treat soft breaks as newlines.
+        md = "- li1\nfoo\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• li1\nfoo\n")
+        XCTAssert(attrStr.startingAttrs.hasMarkdownElementType(.listItem))
+        // foo is also part of the list!
+        XCTAssert(attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
+
+        // Here there are two line breaks closing the list, so foo is not part of it.
+        md = "- li1\n\nfoo\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• li1\nfoo\n")
+        XCTAssert(attrStr.startingAttrs.hasMarkdownElementType(.listItem))
+        // foo is not part of the list
+        XCTAssert(!attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
+        
+        // Demonstrates how to use a "  \n\n" instead of "<br>\n" to end the list.
+        md = "- li1  \n\nfoo\n​"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• li1\nfoo\n")
+        XCTAssert(attrStr.startingAttrs.hasMarkdownElementType(.listItem))
+        // foo is not part of the list
+        XCTAssert(!attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
+
+        // Capturing delimiters
+        md = "- Item 1\n  - Item 1.1\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• Item 1\n\t\t◦ Item 1.1\n")
+        
+        var liAttr = attrStr.attrsAt(0).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
+        XCTAssertEqual(liAttr.typedDelimiter, "-")
+        XCTAssertEqual(liAttr.renderedDelimiter, "•")
+        liAttr = attrStr.attrsAt(10).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
+        XCTAssertEqual(liAttr.typedDelimiter, "-")
+        XCTAssertEqual(liAttr.renderedDelimiter, "◦")
 
     }
     
@@ -242,11 +312,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
             XCTAssertEqual(actualFont.pointSize, Self.defaultMDAttrs.headingPointSizes[i-1], "Font point size for \(headingText) doesn't match.")
         }
     }
-    
-    func testASDF() {
-
-    }
-    
+        
     // https://github.com/madebywindmill/MarkdownToAttributedString/issues/1
     func testHeadingLineBreaks() {
         var md = "# Heading 1"
@@ -303,6 +369,33 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 //        let attrStr = defaultFormatter.format(markdown: md)
 //        XCTAssertEqual(attrStr.string, "Line1\n\n\nLine2")
 //    }
+    
+    func testWhitespaceTrimming() {
+        var md = "This is 😈 **bold 💯** text with 🎈 emoji.\n"
+        var attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "This is 😈 bold 💯 text with 🎈 emoji.\n")
+        attrStr = trimWhitespaceFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "This is 😈 bold 💯 text with 🎈 emoji.")
+
+        md = "😈"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈\n")
+        attrStr = trimWhitespaceFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈")
+
+        md = "\n😈"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈\n")
+        attrStr = trimWhitespaceFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈")
+
+        md = "\n\t😈\t\t"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈\t\t\n")
+        attrStr = trimWhitespaceFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "😈")
+
+    }
 
 }
 

@@ -15,9 +15,8 @@ import Markdown
 /// Custom markdown element attributes allow fully invertible conversions because they specifically mark the source markdown in the NSAttributedString.
 ///
 /// When present, the key is `NSAttributedString.Key.MTASMarkdownElements` and the value is a `MarkdownElementAttributes` object.
-open class MarkdownElementAttribute: NSObject {
+open class MarkdownElementAttribute: NSObject, NSCopying {
     public var elementType: MarkupType
-    public var associatedMarkup: Markup?
     
     public static func == (lhs: MarkdownElementAttribute, rhs: MarkdownElementAttribute) -> Bool {
         // NB: `Markup` is not Equatable.
@@ -29,10 +28,8 @@ open class MarkdownElementAttribute: NSObject {
         return self == other
     }
     
-    public init(elementType: MarkupType,
-                associtatedMarkup: Markup? = nil) {
+    public init(elementType: MarkupType) {
         self.elementType = elementType
-        self.associatedMarkup = associtatedMarkup
     }
     
     public override var description: String {
@@ -40,6 +37,10 @@ open class MarkdownElementAttribute: NSObject {
         return "MarkdownElementAttribute<\(elementType): \(addr)>"
     }
     
+    public func copy(with zone: NSZone? = nil) -> Any {
+        return MarkdownElementAttribute(elementType: elementType)
+    }
+
     public var betterDescriptionMarker: String {
         switch elementType {
             case .strong:
@@ -94,6 +95,10 @@ public class HeadingMarkdownElementAttribute: MarkdownElementAttribute {
         return "<Heading level=\(level)>"
     }
 
+    public override func copy(with zone: NSZone? = nil) -> Any {
+        return HeadingMarkdownElementAttribute(level: level)
+    }
+
 }
 
 public class LinkMarkdownElementAttribute: MarkdownElementAttribute {
@@ -118,16 +123,26 @@ public class LinkMarkdownElementAttribute: MarkdownElementAttribute {
     public override var betterDescriptionMarker: String {
         return "<Link url=\(url.absoluteURL)>"
     }
+    
+    public override func copy(with zone: NSZone? = nil) -> Any {
+        return LinkMarkdownElementAttribute(url: url)
+    }
 }
 
 public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
-    public let listDepth: Int // 0 indexed
-    public let indexInParent: Int
-    public let prefix: String
+    public var listDepth: Int // 0 indexed
+    public var indexInParent: Int
+    public var prefix: String
+    public var typedDelimiter: String
+    public var renderedDelimiter: String
     
     public override var description: String {
         let addr = "\(Unmanaged.passUnretained(self).toOpaque())"
         return "ListItemMarkdownElementAttribute<\(addr)> (listDepth: \(listDepth), indexInParent: \(indexInParent), prefix: \(prefix))"
+    }
+
+    public override var betterDescriptionMarker: String {
+        return "<ListItem depth=\(listDepth) index=\(indexInParent) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
     }
 
     public static func == (lhs: ListItemMarkdownElementAttribute, rhs: ListItemMarkdownElementAttribute) -> Bool
@@ -136,6 +151,8 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
             && lhs.listDepth == rhs.listDepth
             && lhs.indexInParent == rhs.indexInParent
             && lhs.prefix == rhs.prefix
+            && lhs.typedDelimiter == rhs.typedDelimiter
+            && lhs.renderedDelimiter == rhs.renderedDelimiter
     }
 
     public override func isEqual(_ object: Any?) -> Bool {
@@ -143,17 +160,20 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
         return self == other
     }
 
-    public init(listDepth: Int, indexInParent: Int, prefix: String) {
+    public init(listDepth: Int, indexInParent: Int, prefix: String, typedDelimiter: String, renderedDelimiter: String) {
         self.listDepth = listDepth
         self.indexInParent = indexInParent
         self.prefix = prefix
+        self.typedDelimiter = typedDelimiter
+        self.renderedDelimiter = renderedDelimiter
         super.init(elementType: .listItem)
     }
     
-    public override var betterDescriptionMarker: String {
-        return "<ListItem depth=\(listDepth) index=\(indexInParent) prefix=\"\(prefix)\">"
+    public override func copy(with zone: NSZone? = nil) -> Any {
+        return ListItemMarkdownElementAttribute(listDepth: listDepth, indexInParent: indexInParent, prefix: prefix, typedDelimiter: typedDelimiter, renderedDelimiter: renderedDelimiter)
     }
 
+    
 }
 
 
@@ -184,34 +204,45 @@ public class MarkdownElementAttributes: NSObject, NSCopying {
         return "<MarkdownElementAttributes: \(addr)> \(storage.description)"
     }
     
-    public func copy(with zone: NSZone? = nil) -> Any {
+    public var allAttributes: [(MarkupType, MarkdownElementAttribute)] {
+        return Array(storage)
+    }
+}
+
+public extension MarkdownElementAttributes {
+    func copy(with zone: NSZone? = nil) -> Any {
         return MarkdownElementAttributes(self.storage)
     }
 
-    public func get(_ key: MarkupType) -> MarkdownElementAttribute? {
+    func get(_ key: MarkupType) -> MarkdownElementAttribute? {
         return storage[key]
     }
 
-    public func set(_ key: MarkupType, value: MarkdownElementAttribute) {
+    func set(_ key: MarkupType, value: MarkdownElementAttribute) {
         storage[key] = value
     }
 
-    public func merging(_ other: MarkdownElementAttributes) -> MarkdownElementAttributes {
+    func merging(_ other: MarkdownElementAttributes) -> MarkdownElementAttributes {
         var merged = self.storage
         for (key, value) in other.storage {
             merged[key] = value
         }
         return MarkdownElementAttributes(merged)
     }
-
-    public var allAttributes: [(MarkupType, MarkdownElementAttribute)] {
-        return Array(storage)
+    
+    func includesElementType(_ elementType: MarkupType) -> Bool {
+        return storage[elementType] != nil
     }
+
 }
 
 public extension StringAttrs {
+    var markdownElementAttributes: MarkdownElementAttributes? {
+        return self[.markdownElements] as? MarkdownElementAttributes
+    }
+    
     var hasMTASMarkdownElements: Bool {
-        return self[.markdownElements] != nil
+        return markdownElementAttributes != nil
     }
             
     func markdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {

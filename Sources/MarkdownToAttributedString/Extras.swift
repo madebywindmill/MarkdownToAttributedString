@@ -58,6 +58,23 @@ public extension NSAttributedString {
     }
 }
 
+extension NSAttributedString {
+    var startingAttrs: StringAttrs {
+        if length > 0 {
+            return attrsAt(0)
+        } else {
+            return [:]
+        }
+    }
+    
+    func attrsAt(_ loc: Int) -> StringAttrs {
+        guard loc >= 0 && loc < length else {
+            return [:]
+        }
+        return attributes(at: loc, effectiveRange: nil)
+    }
+}
+
 extension String {
     var nsString: NSString {
         return self as NSString

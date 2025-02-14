@@ -29,7 +29,7 @@ struct AttributedStringVisitor: MarkupVisitor {
          options: FormattingOptions? = nil) {
         self.markdown = markdown
         self.markdownAttributes = attributes ?? MarkdownAttributes.default
-        self.currentAttributes = self.markdownAttributes.baseAttributes
+        self.currentAttributes = self.markdownAttributes.baseAttributes.deepCopy()
         self.formattingOptions = options
     }
 
@@ -58,27 +58,27 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitText(_ text: Text) {
         debugLog("<open>", file: "")
-        debugLog("appending: \(text.string)")
         appendToAttrStr(string: text.string)
         debugLog("<close>", file: "")
     }
 
+    // We deviate from spec here by inserting newlines for soft breaks. This makes dealing with external input, which may not have been crafted for markdown specifically, better. In the future this could be gated by a `strict` options flag.
     mutating func visitSoftBreak(_ softBreak: SoftBreak) {
         debugLog("<open>", file: "")
-        appendToAttrStr(string: "\n")
+        appendNewline()
         debugLog("<close>", file: "")
     }
     
-    // NB: I've never seen this called!
+    // This is for hard line breaks, but SwiftMarkdown only seems to support the "\\\n" variety, not "  \n".
     mutating func visitLineBreak(_ lineBreak: LineBreak) {
         debugLog("<open>", file: "")
-        appendToAttrStr(string: "\n")
+        appendNewline()
         debugLog("<close>", file: "")
     }
         
     mutating func visitInlineHTML(_ inlineHTML: InlineHTML) {
         if inlineHTML.rawHTML == "<br>" {
-            appendToAttrStr(string: "\n")
+            appendNewline()
         }
     }
     
@@ -172,7 +172,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
         debugLog("<open>", file: "")
         
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
         var styleAttrs = markdownAttributes.attributesForType(.codeBlock)
         
         if shouldAddCustomAttr {
@@ -183,7 +183,7 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         appendToAttrStr(string: codeBlock.code, attrs: styleAttrs)
                 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
         
         if codeBlock.hasSuccessor {
             appendNewline()
@@ -195,13 +195,13 @@ struct AttributedStringVisitor: MarkupVisitor {
     /// NB about lists and SwiftMarkdown: SM considers *each* top level list item a separate list, so you can expect this to be called recursively once for each top level item. (Which yes, makes handling newlines a challenge.)
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
         guard optionsSupportEl(.unorderedList) else {
-            appendPlainText("\n")
+            appendNewline()
             debugLog("Skipping unsupported: unorderedList"); return
         }
         debugLog("<open>", file: "")
         
         var styleAttrs = markdownAttributes.attributesForType(.unorderedList)
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
 
         if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
@@ -223,19 +223,20 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewline()
         }
 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
 
         debugLog("<close>", file: "")
     }
 
     mutating func visitOrderedList(_ orderedList: OrderedList) {
         guard optionsSupportEl(.orderedList) else {
-            appendPlainText("\n")
-            debugLog("Skipping unsupported: orderedList"); return
+            debugLog("Skipping unsupported: orderedList")
+            appendNewline()
+            return
         }
         debugLog("<open>", file: "")
         var styleAttrs = markdownAttributes.attributesForType(.orderedList)
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
         
         if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
@@ -255,7 +256,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             }
         }
 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
 
         debugLog("<close>", file: "")
     }
@@ -263,30 +264,43 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitListItem(_ listItem: ListItem, index: Int? = nil) {
         guard optionsSupportEl(.listItem) else {
-            appendPlainText("\n")
-            debugLog("Skipping unsupported: listItem"); return
+            debugLog("Skipping unsupported: listItem")
+            appendNewline()
+            return
         }
         debugLog("<open>", file: "")
         var styleAttrs = markdownAttributes.attributesForType(.listItem)
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
 
         currentAttributes.mergeAttributes(styleAttrs)
-
+        
         let prefix: String
+        let renderedDelimiter: String
         if let index = index {
             prefix = "\(index). "
+            renderedDelimiter = "•"
         } else {
             let bullets = ["•", "◦", "▪", "▫"]
+            renderedDelimiter = bullets[listItem.listDepth % bullets.count]
             let tabs = String(repeating: "\t", count: listItem.listDepth + 1)
-            prefix = tabs + bullets[listItem.listDepth % bullets.count] + " "
+            prefix = tabs + renderedDelimiter + " "
         }
 
         if shouldAddCustomAttr {
+            var typedDelimiter = "-"
+            if let lowerBound = listItem.range?.lowerBound,
+               let char = markdown.characterAt(line: lowerBound.line, col: lowerBound.column)
+            {
+                typedDelimiter = String(char)
+            }
+            
             styleAttrs.addMarkdownElementAttr(
                 ListItemMarkdownElementAttribute(
                     listDepth: listItem.listDepth,
                     indexInParent: listItem.indexInParent,
-                    prefix: prefix)
+                    prefix: prefix,
+                    typedDelimiter: typedDelimiter,
+                    renderedDelimiter: renderedDelimiter)
             )
         }
         currentAttributes.mergeAttributes(styleAttrs)
@@ -299,7 +313,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewline()
         }
 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
         debugLog("<close>", file: "")
     }
 
@@ -327,7 +341,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
         debugLog("<open>", file: "")
 
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
 
         let level = max(1, min(heading.level, 6))
 
@@ -358,7 +372,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             appendNewline()
         }
 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
         debugLog("<close>", file: "")
     }
 
@@ -383,12 +397,12 @@ struct AttributedStringVisitor: MarkupVisitor {
             styleAttrs[.link] = url
         }
 
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
         currentAttributes.mergeAttributes(styleAttrs)
 
         visitChildren(of: link)
 
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
 
         debugLog("<close>", file: "")
     }
@@ -423,10 +437,10 @@ struct AttributedStringVisitor: MarkupVisitor {
         _ attributes: StringAttrs,
         _ markup: Markup
     ) {
-        let previousAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
         currentAttributes.mergeAttributes(attributes)
         visitChildren(of: markup)
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
     }
     
     private mutating func visitWithMergedAttributes(
@@ -434,8 +448,8 @@ struct AttributedStringVisitor: MarkupVisitor {
         _ markup: Markup,
         markupType: MarkupType
     ) {
-        let previousAttributes = currentAttributes
-        var mergedAttributes = currentAttributes
+        let previousAttributes = currentAttributes.deepCopy()
+        var mergedAttributes = currentAttributes.deepCopy()
         mergedAttributes.mergeAttributes(newAttributes) // Merge general attributes
         
         if shouldAddCustomAttr {
@@ -450,9 +464,9 @@ struct AttributedStringVisitor: MarkupVisitor {
             mergedAttributes[.font] = CocoaFont(descriptor: newDescriptor, size: expectedFont.pointSize)
         }
 
-        currentAttributes = mergedAttributes
+        currentAttributes = mergedAttributes.deepCopy()
         visitChildren(of: markup)
-        currentAttributes = previousAttributes
+        currentAttributes = previousAttributes.deepCopy()
     }
 
     private func mergeFontDescriptors(base: FontDescriptor, expected: FontDescriptor) -> FontDescriptor {
@@ -568,5 +582,79 @@ extension StringAttrs {
                 self[key] = val
             }
         }
+    }
+}
+
+extension Dictionary where Key == NSAttributedString.Key, Value == Any {
+    func deepCopy() -> StringAttrs {
+        var copy: StringAttrs = [:]
+        
+        for (key, value) in self {
+            if let copyable = value as? NSCopying {
+                copy[key] = copyable.copy()
+            } else if let array = value as? [Any] {
+                copy[key] = array.deepCopyArray()
+            } else if let dict = value as? [AnyHashable: Any] {
+                copy[key] = dict.deepCopyDict()
+            } else {
+                copy[key] = value // Assume it's a value type (Int, String, etc.)
+            }
+        }
+        
+        return copy
+    }
+}
+
+private extension Array where Element == Any {
+    func deepCopyArray() -> [Any] {
+        return self.map { element in
+            if let copyable = element as? NSCopying {
+                return copyable.copy()
+            } else if let dict = element as? [AnyHashable: Any] {
+                return dict.deepCopyDict()
+            } else {
+                return element
+            }
+        }
+    }
+}
+
+private extension Dictionary where Key == AnyHashable, Value == Any {
+    func deepCopyDict() -> [AnyHashable: Any] {
+        var copy: [AnyHashable: Any] = [:]
+        for (key, value) in self {
+            if let copyable = value as? NSCopying {
+                copy[key] = copyable.copy()
+            } else if let array = value as? [Any] {
+                copy[key] = array.deepCopyArray()
+            } else if let dict = value as? [AnyHashable: Any] {
+                copy[key] = dict.deepCopyDict()
+            } else {
+                copy[key] = value
+            }
+        }
+        return copy
+    }
+}
+
+extension String {
+    func characterAt(line: Int, col: Int) -> Character? {
+        let lines = self.split(separator: "\n", omittingEmptySubsequences: false)
+        
+        let zeroIndexedLine = line - 1
+        let zeroIndexedCol = col - 1
+        
+        guard zeroIndexedLine >= 0 && zeroIndexedLine < lines.count else {
+            return nil
+        }
+        
+        let line = lines[zeroIndexedLine]
+        
+        guard zeroIndexedCol >= 0 && zeroIndexedCol < line.count else {
+            return nil
+        }
+        
+        let index = line.index(line.startIndex, offsetBy: zeroIndexedCol)
+        return line[index]
     }
 }
