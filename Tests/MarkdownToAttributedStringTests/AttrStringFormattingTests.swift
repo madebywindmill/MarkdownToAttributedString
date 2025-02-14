@@ -11,7 +11,7 @@ import Markdown
 
 final class MarkdownToAttributedStringTests: XCTestCase {
     
-    static let defaultMDAttrs = MarkdownAttributes.default
+    static let defaultMDStyles = MarkdownStyles.default
     static let options = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true)
     static let trimWhitespaceOptions = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true, trimWhitespace: true)
     
@@ -19,8 +19,8 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     var trimWhitespaceFormatter: AttributedStringFormatter!
     
     override func setUp() {
-        defaultFormatter = AttributedStringFormatter(attributes: Self.defaultMDAttrs, options: Self.options)
-        trimWhitespaceFormatter = AttributedStringFormatter(attributes: Self.defaultMDAttrs, options: Self.trimWhitespaceOptions)
+        defaultFormatter = AttributedStringFormatter(styles: Self.defaultMDStyles, options: Self.options)
+        trimWhitespaceFormatter = AttributedStringFormatter(styles: Self.defaultMDStyles, options: Self.trimWhitespaceOptions)
     }
     
     func testBoldText() {
@@ -31,7 +31,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         var styledRange = (attrStr.string as NSString).range(of: "bold")
         var attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
         var font = attributes[.font] as! CocoaFont
-        var expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
+        var expectedFont = Self.defaultMDStyles.fontAttributeForType(.strong)
         
         XCTAssertTrue(font.customIsEqual(to: expectedFont))
 
@@ -42,7 +42,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         styledRange = (attrStr.string as NSString).range(of: "bold 💯")
         attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
         font = attributes[.font] as! CocoaFont
-        expectedFont = Self.defaultMDAttrs.fontAttributeForType(.strong)
+        expectedFont = Self.defaultMDStyles.fontAttributeForType(.strong)
         
         XCTAssertTrue(font.customIsEqual(to: expectedFont))
     }
@@ -55,7 +55,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         let styledRange = (attrStr.string as NSString).range(of: "italic")
         let attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
         let font = attributes[.font] as! CocoaFont
-        let expectedFont = Self.defaultMDAttrs.fontAttributeForType(.emphasis)
+        let expectedFont = Self.defaultMDStyles.fontAttributeForType(.emphasis)
 
         XCTAssertTrue(font.customIsEqual(to: expectedFont))
     }
@@ -99,7 +99,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         
         let styledRange = (attrStr.string as NSString).range(of: "inline code")
         let attributes = attrStr.attributes(at: styledRange.location, effectiveRange: nil)
-        XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.inlineCode))
+        XCTAssertEqual(attributes[.font] as? CocoaFont, Self.defaultMDStyles.fontAttributeForType(.inlineCode))
     }
     
     func testNestedInlineCode() {
@@ -155,10 +155,10 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         let attributes = attrStr.attributes(at: styleRange.location, effectiveRange: nil)
         XCTAssertEqual(attributes[.strikethroughStyle] as? Int, 1)
         
-        guard let expectedStrikeColor: CocoaColor = Self.defaultMDAttrs.valueForAttribute(.strikethroughColor, type: .strikethrough) else {
+        guard let expectedStrikeColor: CocoaColor = Self.defaultMDStyles.valueForAttribute(.strikethroughColor, type: .strikethrough) else {
             XCTFail(); return
         }
-        guard let expectedFontColor: CocoaColor = Self.defaultMDAttrs.valueForAttribute(.foregroundColor, type: .strikethrough) else {
+        guard let expectedFontColor: CocoaColor = Self.defaultMDStyles.valueForAttribute(.foregroundColor, type: .strikethrough) else {
             XCTFail(); return
         }
 
@@ -274,15 +274,15 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         // Validate attributes for each type
         let boldRange = (attrStr.string as NSString).range(of: "bold")
         let boldAttributes = attrStr.attributes(at: boldRange.location, effectiveRange: nil)
-        XCTAssertEqual(boldAttributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.strong))
+        XCTAssertEqual(boldAttributes[.font] as? CocoaFont, Self.defaultMDStyles.fontAttributeForType(.strong))
         
         let italicRange = (attrStr.string as NSString).range(of: "italic")
         let italicAttributes = attrStr.attributes(at: italicRange.location, effectiveRange: nil)
-        XCTAssertEqual(italicAttributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.emphasis))
+        XCTAssertEqual(italicAttributes[.font] as? CocoaFont, Self.defaultMDStyles.fontAttributeForType(.emphasis))
         
         let codeRange = (attrStr.string as NSString).range(of: "inline code")
         let codeAttributes = attrStr.attributes(at: codeRange.location, effectiveRange: nil)
-        XCTAssertEqual(codeAttributes[.font] as? CocoaFont, Self.defaultMDAttrs.fontAttributeForType(.inlineCode))
+        XCTAssertEqual(codeAttributes[.font] as? CocoaFont, Self.defaultMDStyles.fontAttributeForType(.inlineCode))
     }
     
     func testHeadings() {
@@ -300,7 +300,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
             XCTAssertTrue(attrStr.string.contains("Heading \(i)"), "Heading \(i) not found in output string.")
         }
 
-        let headingFont = Self.defaultMDAttrs.fontAttributeForType(.heading)
+        let headingFont = Self.defaultMDStyles.fontAttributeForType(.heading)
         
         for i in 1...6 {
             let headingText = "Heading \(i)"
@@ -309,7 +309,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 
             let actualFont = attributes[.font] as! CocoaFont
             XCTAssertEqual(actualFont.fontDescriptor.postscriptName, headingFont.fontDescriptor.postscriptName)
-            XCTAssertEqual(actualFont.pointSize, Self.defaultMDAttrs.headingPointSizes[i-1], "Font point size for \(headingText) doesn't match.")
+            XCTAssertEqual(actualFont.pointSize, Self.defaultMDStyles.headingPointSizes[i-1], "Font point size for \(headingText) doesn't match.")
         }
     }
         

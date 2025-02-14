@@ -14,7 +14,7 @@ import Markdown
 
 struct AttributedStringVisitor: MarkupVisitor {
     var markdown: String
-    var markdownAttributes: MarkdownAttributes
+    var markdownStyles: MarkdownStyles
 
     private var attributedString = NSMutableAttributedString()
     private var currentAttributes: StringAttrs
@@ -25,11 +25,11 @@ struct AttributedStringVisitor: MarkupVisitor {
     private let loggingQ = DispatchQueue(label: "MTAS.logging")
 
     init(markdown: String,
-         attributes: MarkdownAttributes? = nil,
+         styles: MarkdownStyles? = nil,
          options: FormattingOptions? = nil) {
         self.markdown = markdown
-        self.markdownAttributes = attributes ?? MarkdownAttributes.default
-        self.currentAttributes = self.markdownAttributes.baseAttributes.deepCopy()
+        self.markdownStyles = styles ?? MarkdownStyles.default
+        self.currentAttributes = self.markdownStyles.baseAttributes.deepCopy()
         self.formattingOptions = options
     }
 
@@ -104,7 +104,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             debugLog("Skipping unsupported: strong"); return
         }
         debugLog("<open>", file: "")
-        let newAttributes = markdownAttributes.styleAttributes[.strong] ?? [:]
+        let newAttributes = markdownStyles.styleAttributes[.strong] ?? [:]
         visitWithMergedAttributes(newAttributes, strong, markupType: .strong)
         debugLog("<close>", file: "")
     }
@@ -115,7 +115,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             debugLog("Skipping unsupported: emphasis"); return
         }
         debugLog("<open>", file: "")
-        let newAttributes = markdownAttributes.styleAttributes[.emphasis] ?? [:]
+        let newAttributes = markdownStyles.styleAttributes[.emphasis] ?? [:]
         visitWithMergedAttributes(newAttributes, emphasis, markupType: .emphasis)
         debugLog("<close>", file: "")
     }
@@ -126,7 +126,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             debugLog("Skipping unsupported: inlineCode"); return
         }
         debugLog("<open>", file: "")
-        var styleAttrs = markdownAttributes.attributesForType(.inlineCode)
+        var styleAttrs = markdownStyles.attributesForType(.inlineCode)
 
         var currentParent = inlineCode.parent
         while let parent = currentParent {
@@ -173,7 +173,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         debugLog("<open>", file: "")
         
         let previousAttributes = currentAttributes.deepCopy()
-        var styleAttrs = markdownAttributes.attributesForType(.codeBlock)
+        var styleAttrs = markdownStyles.attributesForType(.codeBlock)
         
         if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
@@ -200,7 +200,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
         debugLog("<open>", file: "")
         
-        var styleAttrs = markdownAttributes.attributesForType(.unorderedList)
+        var styleAttrs = markdownStyles.attributesForType(.unorderedList)
         let previousAttributes = currentAttributes.deepCopy()
 
         if shouldAddCustomAttr {
@@ -235,7 +235,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             return
         }
         debugLog("<open>", file: "")
-        var styleAttrs = markdownAttributes.attributesForType(.orderedList)
+        var styleAttrs = markdownStyles.attributesForType(.orderedList)
         let previousAttributes = currentAttributes.deepCopy()
         
         if shouldAddCustomAttr {
@@ -269,7 +269,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             return
         }
         debugLog("<open>", file: "")
-        var styleAttrs = markdownAttributes.attributesForType(.listItem)
+        var styleAttrs = markdownStyles.attributesForType(.listItem)
         let previousAttributes = currentAttributes.deepCopy()
 
         currentAttributes.mergeAttributes(styleAttrs)
@@ -345,10 +345,10 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         let level = max(1, min(heading.level, 6))
 
-        var styleAttrs = markdownAttributes.attributesForType(.heading)
+        var styleAttrs = markdownStyles.attributesForType(.heading)
         
         let baseFont: CocoaFont = (styleAttrs[.font] as? CocoaFont) ?? CocoaFont.systemFont(ofSize: 15)
-        let fontSize = markdownAttributes.headingPointSizes[level - 1]
+        let fontSize = markdownStyles.headingPointSizes[level - 1]
         let headingFont: CocoaFont
 #if os(macOS)
         headingFont = CocoaFont(descriptor: baseFont.fontDescriptor, size: fontSize) ?? baseFont
@@ -383,7 +383,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
         debugLog("<open>", file: "")
 
-        var styleAttrs = markdownAttributes.attributesForType(.link)
+        var styleAttrs = markdownStyles.attributesForType(.link)
 
         if let urlstr = link.destination {
             guard let url = URL(string: urlstr) else {
@@ -414,7 +414,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
         debugLog("<open>", file: "")
         
-        var styleAttrs = markdownAttributes.styleAttributes[.strikethrough] ?? markdownAttributes.baseAttributes
+        var styleAttrs = markdownStyles.styleAttributes[.strikethrough] ?? markdownStyles.baseAttributes
         if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
                 MarkdownElementAttribute(elementType: .strikethrough)
@@ -458,7 +458,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             )
         }
 
-        if let expectedFont = markdownAttributes.fontAttributeForType(markupType) as? CocoaFont,
+        if let expectedFont = markdownStyles.fontAttributeForType(markupType) as? CocoaFont,
            let currentFont = currentAttributes[.font] as? CocoaFont {
             let newDescriptor = mergeFontDescriptors(base: currentFont.fontDescriptor, expected: expectedFont.fontDescriptor)
             mergedAttributes[.font] = CocoaFont(descriptor: newDescriptor, size: expectedFont.pointSize)
@@ -515,7 +515,7 @@ struct AttributedStringVisitor: MarkupVisitor {
     private func appendPlainText(_ plainText: String) {
         attributedString.append(NSAttributedString(
             string: plainText,
-            attributes: markdownAttributes.baseAttributes))
+            attributes: markdownStyles.baseAttributes))
     }
 
     private func debugLog(_ message: String, file: String = #file, line: Int = #line, function: String = #function) {

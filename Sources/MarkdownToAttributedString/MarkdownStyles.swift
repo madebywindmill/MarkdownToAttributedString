@@ -1,5 +1,5 @@
 //
-//  MarkdownAttributes.swift
+//  MarkdownStyles.swift
 //  MarkdownToAttributedString
 //
 //  Created by John Scalo on 1/18/25.
@@ -12,7 +12,7 @@ import UIKit
 #endif
 import Markdown
 
-/// Encapsulates styling attributes for rendering Markdown elements with `AttributedStringFormatter`.
+/// Encapsulates styling for rendering Markdown elements with `AttributedStringFormatter`.
 ///
 /// - Parameters:
 ///   - baseAttributes: A dictionary of default text attributes (`StringAttrs`) applied to all Markdown content
@@ -24,7 +24,7 @@ import Markdown
 ///   - headingPointSizes: An array of `CGFloat` values specifying font sizes for headings. The first value applies
 ///     to level 1 headings (`#`), the second to level 2 headings (`##`), and so on. If there are fewer values than
 ///     heading levels, the last size in the array is reused for remaining levels.
-public struct MarkdownAttributes {
+public struct MarkdownStyles {
     public var baseAttributes: StringAttrs
     public var styleAttributes: [MarkupType: StringAttrs]
     public var headingPointSizes: [CGFloat] = [22, 18, 15, 14, 13, 11]
@@ -58,14 +58,14 @@ public struct MarkdownAttributes {
     }
 }
 
-/// A default set of MarkdownAttributes, intended mainly for tests, debugging, and demonstration.
-public extension MarkdownAttributes {
-    static var `default`: MarkdownAttributes {
+/// A default set of MarkdownStyles, intended mainly for tests, debugging, and demonstration.
+public extension MarkdownStyles {
+    static var `default`: MarkdownStyles {
         let indentedPStyle = NSMutableParagraphStyle()
         indentedPStyle.firstLineHeadIndent = 20
         indentedPStyle.headIndent = 20
         
-        return MarkdownAttributes(
+        return MarkdownStyles(
             baseAttributes: [
                 .font: CocoaFont.systemFont(ofSize: 13),
                 .foregroundColor: CocoaColor.darkGray

@@ -127,8 +127,8 @@ This [is my website ](https://madebywindmill.com).
         ]
     ]
     
-    let markdownAttributes = MarkdownAttributes(baseAttributes: baseAttrs, styleAttributes: styleAttrs)
-    let formatter = AttributedStringFormatter(markdown: md, attributes: markdownAttributes)
+    let markdownStyles = MarkdownStyles(baseAttributes: baseAttrs, styleAttributes: styleAttrs)
+    let formatter = AttributedStringFormatter(markdown: md, styles: markdownStyles)
     let attrStr = formatter.format()
     someLabel.attributedText = attrStr
 

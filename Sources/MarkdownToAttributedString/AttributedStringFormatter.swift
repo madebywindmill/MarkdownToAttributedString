@@ -10,40 +10,40 @@ import Foundation
 
 /// A formatter for converting Markdown strings into `NSAttributedString` objects with customizable styling.
 ///
-/// Provides an interface for rendering Markdown content as rich text, allowing you to apply custom styles Markdown elements like headings, links, and lists. Uses `MarkdownAttributes` for style definitions and `AttributedStringVisitor` for traversing and rendering the Markdown structure.
+/// Provides an interface for rendering Markdown content as rich text, allowing you to apply custom styles Markdown elements like headings, links, and lists. Uses `MarkdownStyles` for style definitions and `AttributedStringVisitor` for traversing and rendering the Markdown structure.
 ///
 public class AttributedStringFormatter {
     
     public var options: FormattingOptions
 
-    private var attributes: MarkdownAttributes?
+    private var styles: MarkdownStyles?
     
-    /// Initialize the formatter with a Markdown string and optional styling attributes.
+    /// Initialize the formatter with a Markdown string and optional styling.
     ///
     /// - Parameters:
     ///   - markdown: The Markdown content to be converted.
-    ///   - attributes: An optional `MarkdownAttributes` object defining styles for the formatted output.
+    ///   - styles: An optional `MarkdownStyles` object defining styles for the formatted output.
     public init(
-        attributes: MarkdownAttributes? = nil,
+        styles: MarkdownStyles? = nil,
         options: FormattingOptions = FormattingOptions.default)
     {
-        self.attributes = attributes
+        self.styles = styles
         self.options = options
     }
 
-    /// Immediately converts a Markdown string into an `NSAttributedString` with the given styling attributes.
+    /// Immediately converts a Markdown string into an `NSAttributedString` with the given styling.
     ///
     /// - Parameters:
     ///   - markdown: The Markdown content to be converted.
-    ///   - attributes: An optional `MarkdownAttributes` object defining styles for the Markdown elements.
+    ///   - styles: An optional `MarkdownStyles` object defining styles for the Markdown elements.
     /// - Returns: An `NSAttributedString` representing the formatted Markdown content.
     public static func format(
         markdown: String,
-        attributes: MarkdownAttributes? = nil,
+        styles: MarkdownStyles? = nil,
         options: FormattingOptions = FormattingOptions.default) -> NSAttributedString
     {
         let asf = AttributedStringFormatter(
-            attributes: attributes,
+            styles: styles,
             options: options)
         return asf.format(markdown: markdown)
     }
@@ -57,7 +57,7 @@ public class AttributedStringFormatter {
     public func format(markdown: String) -> NSAttributedString {
         var asv = AttributedStringVisitor(
             markdown: markdown,
-            attributes: attributes,
+            styles: styles,
             options: options)
         
         var result = asv.convert()
@@ -84,7 +84,7 @@ public class AttributedStringFormatter {
                 result = result.attributedSubstring(from: trimmedRange)
             } else {
                 // The entire string is whitespace
-                return NSAttributedString(string: "", attributes: attributes?.baseAttributes)
+                return NSAttributedString(string: "", attributes: styles?.baseAttributes)
             }
         }
 
