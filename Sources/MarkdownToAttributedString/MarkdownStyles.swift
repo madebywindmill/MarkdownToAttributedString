@@ -109,6 +109,7 @@ public extension MarkdownStyles {
                     .foregroundColor: CocoaColor.lightGray
                 ],
                 .heading: [
+                    .font: CocoaFont.boldSystemFont(ofSize: 13),
                     .paragraphStyle: indentedPStyle
                 ],
                 .unorderedList: [
