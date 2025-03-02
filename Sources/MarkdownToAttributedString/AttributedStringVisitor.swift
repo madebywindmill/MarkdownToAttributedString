@@ -22,6 +22,11 @@ struct AttributedStringVisitor: MarkupVisitor {
     private var shouldAddCustomAttr: Bool {
         return formattingOptions?.addCustomMarkdownElementAttributes ?? false
     }
+    private var currentUnorderedListEl: MarkdownElementAttribute?
+    private var currentUnorderedListLevel: Int = 0
+    private var currentOrderedListEl: MarkdownElementAttribute?
+    private var currentOrderedListLevel: Int = 0
+    
     private let loggingQ = DispatchQueue(label: "MTAS.logging")
 
     init(markdown: String,
@@ -38,7 +43,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         let document = Document(parsing: markdown)
         visit(document)
         
-        // Apparently something in SwiftMarkdown is sometimes adding a non-breakable space at the end. Remove it.
+        // Apparently something in SwiftMarkdown is sometimes adding a zero-width space at the end. Remove it.
         if attributedString.string.hasSuffix("\u{200B}") {
             attributedString.deleteCharacters(in: NSRange(location: attributedString.length - 1, length: 1))
         }
@@ -78,7 +83,15 @@ struct AttributedStringVisitor: MarkupVisitor {
         
     mutating func visitInlineHTML(_ inlineHTML: InlineHTML) {
         if inlineHTML.rawHTML == "<br>" {
-            appendNewline()
+            debugLog("<open>", file: "")
+            if shouldAddCustomAttr {
+                var attrs = markdownStyles.baseAttributes
+                attrs.mergeAttributes([.forcedLineBreak: true])
+                appendNewline(attrs: attrs)
+            } else {
+                appendNewline()
+            }
+            debugLog("<close>", file: "")
         }
     }
     
@@ -92,7 +105,15 @@ struct AttributedStringVisitor: MarkupVisitor {
         visitChildren(of: paragraph)
         
         if paragraph.hasSuccessor {
-            appendNewline()
+            var attrs = markdownStyles.baseAttributes
+            
+            // If this paragraph is part of a container block, be sure to attach the block to the newline's attrs
+            if paragraph.isChildOfUnorderedList, let currentUnorderedListEl {
+                attrs[.markdownElements] = MarkdownElementAttributes([.unorderedList: currentUnorderedListEl])
+            } else if paragraph.isChildOfOrderedList, let currentOrderedListEl {
+                attrs[.markdownElements] = MarkdownElementAttributes([.orderedList: currentOrderedListEl])
+            }
+            appendNewline(attrs: attrs)
         }
 
         debugLog("<close>", file: "")
@@ -133,7 +154,6 @@ struct AttributedStringVisitor: MarkupVisitor {
             if parent is Strong {
                 if let baseFont = styleAttrs[.font] as? CocoaFont {
                     if shouldAddCustomAttr {
-                        
                         styleAttrs.addMarkdownElementAttr(
                             MarkdownElementAttribute(elementType: .strong)
                         )
@@ -191,22 +211,28 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         debugLog("<close>", file: "")
     }
-
-    /// NB about lists and SwiftMarkdown: SM considers *each* top level list item a separate list, so you can expect this to be called recursively once for each top level item. (Which yes, makes handling newlines a challenge.)
+    
+    /// NB about lists and SwiftMarkdown: SM considers nested lists a separate list, i.e. a list can be a child of a list item, so you can expect this to be called recursively for each nested list.
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
         guard optionsSupportEl(.unorderedList) else {
             appendNewline()
             debugLog("Skipping unsupported: unorderedList"); return
         }
         debugLog("<open>", file: "")
-        
-        var styleAttrs = markdownStyles.attributesForType(.unorderedList)
+                
         let previousAttributes = currentAttributes.deepCopy()
+        var styleAttrs = markdownStyles.attributesForType(.unorderedList)
+
+        if (currentUnorderedListEl == nil) {
+            assert(currentUnorderedListLevel == 0)
+            currentUnorderedListEl = MarkdownElementAttribute(elementType: .unorderedList)
+        }
+        
+        currentUnorderedListLevel += 1
 
         if shouldAddCustomAttr {
-            styleAttrs.addMarkdownElementAttr(
-                MarkdownElementAttribute(elementType: .unorderedList)
-            )
+            guard let currentUnorderedListEl else { assertionFailure(); return }
+            styleAttrs.addMarkdownElementAttr(currentUnorderedListEl)
         }
 
         currentAttributes.mergeAttributes(styleAttrs)
@@ -222,6 +248,11 @@ struct AttributedStringVisitor: MarkupVisitor {
         if unorderedList.hasSuccessor {
             appendNewline()
         }
+        
+        currentUnorderedListLevel -= 1
+        if currentUnorderedListLevel == 0 {
+            currentUnorderedListEl = nil
+        }
 
         currentAttributes = previousAttributes.deepCopy()
 
@@ -230,30 +261,43 @@ struct AttributedStringVisitor: MarkupVisitor {
 
     mutating func visitOrderedList(_ orderedList: OrderedList) {
         guard optionsSupportEl(.orderedList) else {
-            debugLog("Skipping unsupported: orderedList")
             appendNewline()
-            return
+            debugLog("Skipping unsupported: orderedList"); return
         }
         debugLog("<open>", file: "")
-        var styleAttrs = markdownStyles.attributesForType(.orderedList)
-        let previousAttributes = currentAttributes.deepCopy()
         
+        let previousAttributes = currentAttributes.deepCopy()
+        var styleAttrs = markdownStyles.attributesForType(.orderedList)
+        
+        if (currentOrderedListEl == nil) {
+            assert(currentOrderedListLevel == 0)
+            currentOrderedListEl = MarkdownElementAttribute(elementType: .orderedList)
+        }
+        
+        currentOrderedListLevel += 1
+
         if shouldAddCustomAttr {
-            styleAttrs.addMarkdownElementAttr(
-                MarkdownElementAttribute(elementType: .orderedList)
-            )
+            guard let currentOrderedListEl else { assertionFailure(); return }
+            styleAttrs.addMarkdownElementAttr(currentOrderedListEl)
         }
 
         currentAttributes.mergeAttributes(styleAttrs)
 
-        var itemIndex = 1
         for child in orderedList.children {
             if let listItem = child as? ListItem {
-                visitListItem(listItem, index: itemIndex)
-                itemIndex += 1
+                visitListItem(listItem, orderedIndex: Int(orderedList.startIndex) + child.indexInParent)
             } else {
                 visit(child)
             }
+        }
+
+        if orderedList.hasSuccessor {
+            appendNewline()
+        }
+
+        currentOrderedListLevel -= 1
+        if currentOrderedListLevel == 0 {
+            currentOrderedListEl = nil
         }
 
         currentAttributes = previousAttributes.deepCopy()
@@ -262,7 +306,8 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
     
 
-    mutating func visitListItem(_ listItem: ListItem, index: Int? = nil) {
+    // orderedIndex is non-nil when part of an ordered list
+    mutating func visitListItem(_ listItem: ListItem, orderedIndex: Int? = nil) {
         guard optionsSupportEl(.listItem) else {
             debugLog("Skipping unsupported: listItem")
             appendNewline()
@@ -274,11 +319,22 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         currentAttributes.mergeAttributes(styleAttrs)
         
+        if listItem.isFirst,
+           let pstyle = markdownStyles.blockStartParagraphStyle
+        {
+            currentAttributes.mergeAttributes([.paragraphStyle: pstyle])
+        } else if listItem.isLast,
+           let pstyle = markdownStyles.blockEndParagraphStyle
+        {
+            currentAttributes.mergeAttributes([.paragraphStyle: pstyle])
+        }
+
+        
         let prefix: String
         let renderedDelimiter: String
-        if let index = index {
-            prefix = "\(index). "
-            renderedDelimiter = markdownStyles.unorderedListBullets[0]
+        if let orderedIndex = orderedIndex {
+            prefix = "\t\(orderedIndex). "
+            renderedDelimiter = "\(orderedIndex)"
         } else {
             let bullets = markdownStyles.unorderedListBullets
             renderedDelimiter = bullets[listItem.listDepth % bullets.count]
@@ -287,7 +343,8 @@ struct AttributedStringVisitor: MarkupVisitor {
         }
 
         if shouldAddCustomAttr {
-            var typedDelimiter = "-"
+            // For ordered lists we can consider the typedDelimiter and renderedDelimiter to be the same.
+            var typedDelimiter = orderedIndex != nil ? renderedDelimiter : "-"
             if let lowerBound = listItem.range?.lowerBound,
                let char = markdown.characterAt(line: lowerBound.line, col: lowerBound.column)
             {
@@ -298,6 +355,7 @@ struct AttributedStringVisitor: MarkupVisitor {
                 ListItemMarkdownElementAttribute(
                     listDepth: listItem.listDepth,
                     indexInParent: listItem.indexInParent,
+                    orderedIndex: orderedIndex,
                     prefix: prefix,
                     typedDelimiter: typedDelimiter,
                     renderedDelimiter: renderedDelimiter)
@@ -309,8 +367,9 @@ struct AttributedStringVisitor: MarkupVisitor {
 
         visitChildren(of: listItem)
         
-        if listItem.hasSuccessor {
-            appendNewline()
+        // Don't add a newline if this had child lists, because those child list items add their own newlines
+        if !listItem.hasChildList {
+            appendNewline(attrs: currentAttributes)
         }
 
         currentAttributes = previousAttributes.deepCopy()
@@ -507,15 +566,16 @@ struct AttributedStringVisitor: MarkupVisitor {
         attributedString.append(NSAttributedString(string: string, attributes: actualAttrs))
     }
     
-    private mutating func appendNewline() {
+    private mutating func appendNewline(attrs: StringAttrs? = nil) {
         debugLog("appending newline")
-        appendPlainText("\n")
+        appendPlainText("\n", attrs: attrs)
     }
         
-    private func appendPlainText(_ plainText: String) {
+    private func appendPlainText(_ plainText: String, attrs: StringAttrs? = nil) {
+        let actualAttrs = attrs ?? markdownStyles.baseAttributes
         attributedString.append(NSAttributedString(
             string: plainText,
-            attributes: markdownStyles.baseAttributes))
+            attributes: actualAttrs))
     }
 
     private func debugLog(_ message: String, file: String = #file, line: Int = #line, function: String = #function) {
@@ -533,7 +593,6 @@ struct AttributedStringVisitor: MarkupVisitor {
 }
 
 extension ListItem {
-    
     // Nesting depth of the list item; 0 indexed.
     var listDepth: Int {
         var depth = 0
@@ -545,6 +604,21 @@ extension ListItem {
             current = parent
         }
         return max(0, depth - 1)
+    }
+    
+    var isFirst: Bool {
+        return indexInParent == 0 && listDepth == 0
+    }
+    
+    var isLast: Bool {
+        guard let parent = self.parent else {
+            return false
+        }
+        return indexInParent == parent.childCount - 1
+    }
+    
+    var hasChildList: Bool {
+        return children.contains { $0 is OrderedList || $0 is UnorderedList }
     }
 }
 
@@ -565,19 +639,41 @@ extension Markup {
         return NSRange(location: start,
                        length: range.upperBound.column - start - 1)
     }
+    
+    var isChildOfUnorderedList: Bool {
+        var current: Markup? = self
+        while let parent = current?.parent {
+            if parent is UnorderedList {
+                return true
+            }
+            current = parent
+        }
+        return false
+    }
+    
+    var isChildOfOrderedList: Bool {
+        var current: Markup? = self
+        while let parent = current?.parent {
+            if parent is OrderedList {
+                return true
+            }
+            current = parent
+        }
+        return false
+    }
 }
 
 extension StringAttrs {
     mutating func mergeAttributes(_ otherAttrs: StringAttrs) {
         for (key, val) in otherAttrs {
             if key == .markdownElements, let val = val as? MarkdownElementAttributes {
-                var attrs = (self[.markdownElements] as? MarkdownElementAttributes)?.copy() as? MarkdownElementAttributes ?? MarkdownElementAttributes()
+                let elAttrs = (self[.markdownElements] as? MarkdownElementAttributes)?.copy() as? MarkdownElementAttributes ?? MarkdownElementAttributes()
                 
-                for (markupType, newAttribute) in val.allAttributes {
-                    attrs.set(markupType, value: newAttribute)
+                for (_, newAttribute) in val.allAttributes {
+                    elAttrs.add(newAttribute)
                 }
 
-                self[.markdownElements] = attrs
+                self[.markdownElements] = elAttrs
             } else {
                 self[key] = val
             }

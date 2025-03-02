@@ -167,8 +167,27 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     }
     
 
-    func testOneOff() {
+    func testListEquality() {
+        func uoListAt(_ loc: Int) -> MarkdownElementAttribute {
+            return attrStr.attrsAt(loc).markdownElementAttrForElementType(.unorderedList)!
+        }
+        func oListAt(_ loc: Int) -> MarkdownElementAttribute {
+            return attrStr.attrsAt(loc).markdownElementAttrForElementType(.orderedList)!
+        }
 
+        var md = "- li\n  - li\n    - li\n  - li\n- li\n"
+        var attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• li\n\t\t◦ li\n\t\t\t▪ li\n\t\t◦ li\n\t• li\n")
+        for i in 0..<attrStr.string.count - 1 {
+            XCTAssertEqual(uoListAt(i), uoListAt(i+1))
+        }
+        
+        md = "1. li\n2. li\n3. li\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t1. li\n\t2. li\n\t3. li\n")
+        for i in 0..<attrStr.string.count - 1 {
+            XCTAssertEqual(oListAt(i), oListAt(i+1))
+        }
     }
     
     func testUnorderedLists() {
@@ -176,23 +195,23 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         var md = "- Item 1\n- Item 2\n"
         var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "\t• Item 1\n\t• Item 2\n")
-        XCTAssert(attrStr.hasAttribute(key: .paragraphStyle, at: 0))
-        XCTAssert(attrStr.hasAttribute(key: .paragraphStyle, at: 10))
-        XCTAssert(!attrStr.hasAttribute(key: .paragraphStyle, at: 9))
-        XCTAssert(!attrStr.hasAttribute(key: .paragraphStyle, at: 19))
+        XCTAssertTrue(attrStr.hasAttribute(key: .paragraphStyle, at: 0))
+        XCTAssertTrue(attrStr.hasAttribute(key: .paragraphStyle, at: 10))
+        XCTAssertTrue(attrStr.hasAttribute(key: .paragraphStyle, at: 9))
+        XCTAssertTrue(attrStr.hasAttribute(key: .paragraphStyle, at: 19))
 
         // nested styles
         md = "- **Item 1**\n- *Item 2*\n"
         attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "\t• Item 1\n\t• Item 2\n")
-        XCTAssert(!attrStr.fontAt(location: 0)!.hasBold)
-        XCTAssert(!attrStr.fontAt(location: 1)!.hasBold)
-        XCTAssert(attrStr.fontAt(location: 3)!.hasBold)
-        XCTAssert(attrStr.fontAt(location: 8)!.hasBold)
-        XCTAssert(!attrStr.fontAt(location: 10)!.hasItalic)
-        XCTAssert(!attrStr.fontAt(location: 11)!.hasItalic)
-        XCTAssert(attrStr.fontAt(location: 13)!.hasItalic)
-        XCTAssert(attrStr.fontAt(location: 18)!.hasItalic)
+        XCTAssertFalse(attrStr.fontAt(location: 0)!.hasBold)
+        XCTAssertFalse(attrStr.fontAt(location: 1)!.hasBold)
+        XCTAssertTrue(attrStr.fontAt(location: 3)!.hasBold)
+        XCTAssertTrue(attrStr.fontAt(location: 8)!.hasBold)
+        XCTAssertFalse(attrStr.fontAt(location: 10)!.hasItalic)
+        XCTAssertFalse(attrStr.fontAt(location: 11)!.hasItalic)
+        XCTAssertTrue(attrStr.fontAt(location: 13)!.hasItalic)
+        XCTAssertTrue(attrStr.fontAt(location: 18)!.hasItalic)
 
         md = "* li1\n  * li1.1\n"
         attrStr = defaultFormatter.format(markdown: md)
@@ -202,16 +221,10 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         listItemAttr = attrStr.attributes(at: 7, effectiveRange: nil).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
         XCTAssertEqual(listItemAttr.prefix, "\t\t◦ ")
         XCTAssertEqual(listItemAttr.listDepth, 1)
-
-        md = """
-- li1
-  - li1.1\n
-"""
+        
+        md = "- li1\n  - li1.1\n"
         attrStr = defaultFormatter.format(markdown: md)
-        XCTAssertEqual(attrStr.string, """
-\t• li1
-\t\t◦ li1.1\n
-""")
+        XCTAssertEqual(attrStr.string, "\t• li1\n\t\t◦ li1.1\n")
 
         // According to spec, the "foo" is actually part of the list. In fact it's part of the _first list item_. But our parser doesn't handle that to spec because for external compatibility reasons we treat soft breaks as newlines.
         md = "- li1\nfoo\n"
@@ -224,18 +237,18 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         // Here there are two line breaks closing the list, so foo is not part of it.
         md = "- li1\n\nfoo\n"
         attrStr = defaultFormatter.format(markdown: md)
-        XCTAssertEqual(attrStr.string, "\t• li1\nfoo\n")
+        XCTAssertEqual(attrStr.string, "\t• li1\n\nfoo\n")
         XCTAssert(attrStr.startingAttrs.hasMarkdownElementType(.listItem))
         // foo is not part of the list
-        XCTAssert(!attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
+        XCTAssertFalse(attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
         
         // Demonstrates how to use a "  \n\n" instead of "<br>\n" to end the list.
         md = "- li1  \n\nfoo\n​"
         attrStr = defaultFormatter.format(markdown: md)
-        XCTAssertEqual(attrStr.string, "\t• li1\nfoo\n")
+        XCTAssertEqual(attrStr.string, "\t• li1\n\nfoo\n")
         XCTAssert(attrStr.startingAttrs.hasMarkdownElementType(.listItem))
         // foo is not part of the list
-        XCTAssert(!attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
+        XCTAssertFalse(attrStr.attributes(at: 8, effectiveRange: nil).hasMarkdownElementType(.listItem))
 
         // Capturing delimiters
         md = "- Item 1\n  - Item 1.1\n"
@@ -249,18 +262,38 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertEqual(liAttr.typedDelimiter, "-")
         XCTAssertEqual(liAttr.renderedDelimiter, "◦")
 
+        // Ensure newline attr is in the list block
+        md = "- Item1\n- Item2\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t• Item1\n\t• Item2\n")
+        XCTAssertTrue(attrStr.attrsAt(0).hasMarkdownElementType(.unorderedList))
+        XCTAssertTrue(attrStr.attrsAt(8).hasMarkdownElementType(.unorderedList))
+
     }
     
-//    func testOrderedLists() {
-//        var md = "1. Item 1\n2. Item 2"
-//        var attrStr = defaultFormatter.format(markdown: md)
-//        XCTAssertEqual(attrStr.string, "1. Item 1\n2. Item 2\n")
-//
-//        // Ordered list with different starting number
-//        md = "3. Item 3\n4. Item 4"
-//        attrStr = defaultFormatter.format(markdown: md)
-//        XCTAssertEqual(attrStr.string, "1. Item 3\n2. Item 4\n")
-//    }
+    func testOrderedLists() {
+        var md = "1. Item 1\n2. Item 2\n"
+        var attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t1. Item 1\n\t2. Item 2\n")
+
+        // Ordered list with different starting number
+        md = "3. Item 3\n4. Item 4\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t3. Item 3\n\t4. Item 4\n")
+        
+        // nested styles
+        md = "1. **Item 1**\n2. *Item 2*\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "\t1. Item 1\n\t2. Item 2\n")
+        XCTAssertFalse(attrStr.fontAt(location: 0)!.hasBold)
+        XCTAssertFalse(attrStr.fontAt(location: 1)!.hasBold)
+        XCTAssertTrue(attrStr.fontAt(location: 4)!.hasBold)
+        XCTAssertTrue(attrStr.fontAt(location: 9)!.hasBold)
+        XCTAssertFalse(attrStr.fontAt(location: 12)!.hasItalic)
+        XCTAssertFalse(attrStr.fontAt(location: 13)!.hasItalic)
+        XCTAssertTrue(attrStr.fontAt(location: 15)!.hasItalic)
+        XCTAssertTrue(attrStr.fontAt(location: 20)!.hasItalic)
+    }
         
     func testCompositeMarkdown() {
         let md = "This is **bold** and *italic*, and here is `inline code`.\n- An unordered list item."
@@ -333,43 +366,43 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     }
 
     func testLineBreaks1() {
-        let md = "Line1\nLine2\n"
-        let attrStr = defaultFormatter.format(markdown: md)
+        var md = "Line1\nLine2\n"
+        var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "Line1\nLine2\n")
-    }
-
-    func testLineBreaks2() {
-        let md = "\nLine1\nLine2\n"
-        let attrStr = defaultFormatter.format(markdown: md)
+        
+        md = "\nLine1\nLine2\n"
+        attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "Line1\nLine2\n")
-    }
 
-    func testLineBreaks3() {
-        let md = "\n\nLine1\nLine2\n\n"
-        let attrStr = defaultFormatter.format(markdown: md)
+        md = "\n\nLine1\nLine2\n\n"
+        attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "Line1\nLine2\n")
-    }
 
-    func testLineBreaks4() {
-        let md = "Line1\n\n\nLine2"
-        let attrStr = defaultFormatter.format(markdown: md)
+        md = "Line1\n\n\nLine2\n"
+        attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "Line1\nLine2\n")
-    }
 
-    func testLineBreaks5() {
-        let md = "Line1<br><br><br>Line2"
-        let attrStr = defaultFormatter.format(markdown: md)
+        md = "Line1<br><br><br>Line2\n"
+        attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "Line1\n\n\nLine2\n")
-    }
-    
-    // Fails.
-    // I haven't tested extensively but I don't think SwiftMarkdown is handling hard line breaks as described by CommonMark (using 2+ spaces or a \ before the newline) correctly, or at all. On the other hand they don't work in CommonMark's own playground so maybe I'm misunderstanding.
-//    func testLineBreaks6() {
-//        let md = "Line1  \n  \n  \nLine2"
-//        let attrStr = defaultFormatter.format(markdown: md)
+        
+        md = "Line1<br>\nLine2\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "Line1\n\nLine2\n")
+        
+        // Surprising? But the CommonMark dingus confirms this is correct.
+        md = "Line1<br>\n"
+        attrStr = defaultFormatter.format(markdown: md)
+        XCTAssertEqual(attrStr.string, "Line1\n")
+
+        
+        // Fails. I haven't tested extensively but I don't think SwiftMarkdown is handling hard line breaks as described by CommonMark (using 2+ spaces or a \ before the newline) correctly, or at all. On the other hand they don't work in CommonMark's own playground so maybe I'm misunderstanding.
+//        md = "Line1  \n  \n  \nLine2"
+//        attrStr = defaultFormatter.format(markdown: md)
 //        XCTAssertEqual(attrStr.string, "Line1\n\n\nLine2")
-//    }
-    
+
+    }
+        
     func testWhitespaceTrimming() {
         var md = "This is 😈 **bold 💯** text with 🎈 emoji.\n"
         var attrStr = defaultFormatter.format(markdown: md)

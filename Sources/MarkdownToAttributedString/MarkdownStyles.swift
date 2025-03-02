@@ -31,6 +31,12 @@ public struct MarkdownStyles {
     public var styleAttributes: [MarkupType: StringAttrs]
     public var headingPointSizes: [CGFloat] = [22, 18, 15, 14, 13, 11]
     public var unorderedListBullets: [String] = ["•", "◦", "▪", "▫"]
+    
+    /// **Experimental**
+    /// Paragraph styles to apply at the beginning and end of a container block. This is especially useful for (and currently only implemented for) lists. Since NSParagraphStyle spacing is applied to each line and a list typically has lines separated by a newline, you would end up with the spacing applied to each line if just using a single paragraph style in `styleAttributes` for `orderedList`/`unorderedList`.
+    /// With these, you can instead have the formatter apply a pstyle with paragraph spacing only at the beginning and end (typically `paragraphSpacingBefore` for start and `paragraphSpacing` for end). 
+    public var blockStartParagraphStyle: NSParagraphStyle?
+    public var blockEndParagraphStyle: NSParagraphStyle?
 
     public init(baseAttributes: StringAttrs, styleAttributes: [MarkupType : StringAttrs]) {
         self.baseAttributes = baseAttributes
@@ -68,6 +74,11 @@ public extension MarkdownStyles {
         indentedPStyle.firstLineHeadIndent = 20
         indentedPStyle.headIndent = 20
         
+        let tabbedPStyle = NSMutableParagraphStyle()
+        tabbedPStyle.defaultTabInterval = 9
+        tabbedPStyle.tabStops = []
+
+        
         return MarkdownStyles(
             baseAttributes: [
                 .font: CocoaFont.systemFont(ofSize: 13),
@@ -101,7 +112,7 @@ public extension MarkdownStyles {
                     .paragraphStyle: indentedPStyle
                 ],
                 .unorderedList: [
-                    .paragraphStyle: indentedPStyle
+                    .paragraphStyle: tabbedPStyle
                 ],
                 .orderedList: [
                     .paragraphStyle: indentedPStyle

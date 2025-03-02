@@ -21,7 +21,12 @@ public extension NSAttributedString {
             if let font = nextStr.attribute(.font, at: 0, effectiveRange: nil) as? CocoaFont {
                 str += "<Font name=“\(font.compatibleDisplayName)”>"
             }
-            
+            if let _ = nextStr.attribute(.forcedLineBreak, at: 0, effectiveRange: nil) {
+                str += "<MTASForcedLineBreak>"
+            }
+            if let _ = nextStr.attribute(.paragraphBreak, at: 0, effectiveRange: nil) {
+                str += "<MTASParagraphBreak>"
+            }
             if let markdownEls = nextStr.attribute(.markdownElements, at: 0, effectiveRange: nil) as? MarkdownElementAttributes {
                 for (_, val) in markdownEls.allAttributes {
                     str += val.betterDescriptionMarker
@@ -73,6 +78,17 @@ extension NSAttributedString {
         }
         return attributes(at: loc, effectiveRange: nil)
     }
+    
+    func allAttributeRuns() -> [(NSRange, [NSAttributedString.Key: Any])] {
+        var runs: [(NSRange, [NSAttributedString.Key: Any])] = []
+        
+        self.enumerateAttributes(in: NSRange(location: 0, length: self.length), options: []) { attributes, range, _ in
+            runs.append((range, attributes))
+        }
+        
+        return runs
+    }
+
 }
 
 extension String {

@@ -133,8 +133,12 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
     public var listDepth: Int // 0 indexed
     public var indexInParent: Int
     public var prefix: String
-    public var typedDelimiter: String
+    public var typedDelimiter: String // unordered: the bullet char; ordered: the decimal number char
     public var renderedDelimiter: String
+    public var orderedIndex: Int? // 1-based index in rendered ordered list.
+    public var isOrdered: Bool {
+        return orderedIndex != nil
+    }
     
     public override var description: String {
         let addr = "\(Unmanaged.passUnretained(self).toOpaque())"
@@ -142,7 +146,11 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
     }
 
     public override var betterDescriptionMarker: String {
-        return "<ListItem depth=\(listDepth) index=\(indexInParent) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+        if let orderedIndex {
+            return "<ListItem depth=\(listDepth) index=\(indexInParent) orderedIndex=\(orderedIndex) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+        } else {
+            return "<ListItem depth=\(listDepth) index=\(indexInParent) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+        }
     }
 
     public static func == (lhs: ListItemMarkdownElementAttribute, rhs: ListItemMarkdownElementAttribute) -> Bool
@@ -150,6 +158,7 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
         return lhs.elementType == rhs.elementType
             && lhs.listDepth == rhs.listDepth
             && lhs.indexInParent == rhs.indexInParent
+            && lhs.orderedIndex == rhs.orderedIndex
             && lhs.prefix == rhs.prefix
             && lhs.typedDelimiter == rhs.typedDelimiter
             && lhs.renderedDelimiter == rhs.renderedDelimiter
@@ -160,26 +169,67 @@ public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
         return self == other
     }
 
-    public init(listDepth: Int, indexInParent: Int, prefix: String, typedDelimiter: String, renderedDelimiter: String) {
+    public init(listDepth: Int,
+                indexInParent: Int,
+                orderedIndex: Int? = nil,
+                prefix: String,
+                typedDelimiter: String,
+                renderedDelimiter: String) {
         self.listDepth = listDepth
         self.indexInParent = indexInParent
+        self.orderedIndex = orderedIndex
         self.prefix = prefix
         self.typedDelimiter = typedDelimiter
         self.renderedDelimiter = renderedDelimiter
+        
         super.init(elementType: .listItem)
     }
     
     public override func copy(with zone: NSZone? = nil) -> Any {
-        return ListItemMarkdownElementAttribute(listDepth: listDepth, indexInParent: indexInParent, prefix: prefix, typedDelimiter: typedDelimiter, renderedDelimiter: renderedDelimiter)
+        return ListItemMarkdownElementAttribute(listDepth: listDepth, indexInParent: indexInParent, orderedIndex: orderedIndex, prefix: prefix, typedDelimiter: typedDelimiter, renderedDelimiter: renderedDelimiter)
     }
 
+    // Inc's the indexInParent, and, if ordered, orderedIndex, prefix, and renderedDelimiter.
+    public func incrementIndex() {
+        indexInParent += 1
+        if orderedIndex != nil {
+            orderedIndex! += 1
+            prefix = "\t\(orderedIndex!). "
+            typedDelimiter = "\(orderedIndex!)"
+            renderedDelimiter = "\(orderedIndex!)"
+        }
+    }
     
+    // Sets indexInParent to 0; caller may wish to override.
+    public func incrementListDepth(unorderedListBullets: [String]? = nil) {
+        indexInParent = 0
+        listDepth += 1
+        if let unorderedListBullets {
+            renderedDelimiter = unorderedListBullets[listDepth % unorderedListBullets.count]
+        }
+    }
+
+    // Caller should set indexInParent as needed
+    public func decrementListDepth(unorderedListBullets: [String]? = nil) {
+        listDepth -= 1
+        if let unorderedListBullets {
+            renderedDelimiter = unorderedListBullets[listDepth % unorderedListBullets.count]
+        }
+    }
+
+    public var isFirst: Bool {
+        return indexInParent == 0 && listDepth == 0
+    }
 }
 
 
 /// See `FormattingOptions.addCustomMarkdownElementAttributes`.
 public extension NSAttributedString.Key {
     static let markdownElements: NSAttributedString.Key = .init("MTASMarkdownElements")
+    
+    // Not used here but potentially useful to clients performing live editing as a semantic marker.
+    static let forcedLineBreak: NSAttributedString.Key = .init("MTASForcedLineBreak")
+    static let paragraphBreak: NSAttributedString.Key = .init("MTASParagraphBreak")
 }
 
 public class MarkdownElementAttributes: NSObject, NSCopying {
@@ -207,6 +257,10 @@ public class MarkdownElementAttributes: NSObject, NSCopying {
     public var allAttributes: [(MarkupType, MarkdownElementAttribute)] {
         return Array(storage)
     }
+            
+    public var hasAnyBlock: Bool {
+        storage.keys.contains { $0.isBlock }
+    }
 }
 
 public extension MarkdownElementAttributes {
@@ -218,10 +272,14 @@ public extension MarkdownElementAttributes {
         return storage[key]
     }
 
-    func set(_ key: MarkupType, value: MarkdownElementAttribute) {
-        storage[key] = value
+    func add(_ mdElAttr: MarkdownElementAttribute) {
+        storage[mdElAttr.elementType] = mdElAttr
     }
 
+    func remove(_ type: MarkupType) {
+        storage[type] = nil
+    }
+    
     func merging(_ other: MarkdownElementAttributes) -> MarkdownElementAttributes {
         var merged = self.storage
         for (key, value) in other.storage {
@@ -244,6 +302,11 @@ public extension StringAttrs {
     var hasMTASMarkdownElements: Bool {
         return markdownElementAttributes != nil
     }
+    
+    // Returns true of the attrs includes a container block element.
+    var hasContainerBlock: Bool {
+        return hasMarkdownElementType(.orderedList) || hasMarkdownElementType(.unorderedList) || hasMarkdownElementType(.codeBlock)
+    }
             
     func markdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {
         guard let val = self[.markdownElements] as? MarkdownElementAttributes else {
@@ -252,13 +315,25 @@ public extension StringAttrs {
         return val.get(elementType)
     }
     
+    func containerBlockElementAttr() -> MarkdownElementAttribute? {
+        if let v = markdownElementAttrForElementType(.unorderedList) {
+            return v
+        } else if let v = markdownElementAttrForElementType(.orderedList) {
+            return v
+        } else if let v = markdownElementAttrForElementType(.codeBlock) {
+            return v
+        } else {
+            return nil
+        }
+    }
+    
     func hasMarkdownElementType(_ elementType: MarkupType) -> Bool {
         return markdownElementAttrForElementType(elementType) != nil
     }
     
     mutating func addMarkdownElementAttr(_ attr: MarkdownElementAttribute) {
-        var d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
-        d.set(attr.elementType, value: attr)
+        let d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
+        d.add(attr)
         self[.markdownElements] = d
     }
 
