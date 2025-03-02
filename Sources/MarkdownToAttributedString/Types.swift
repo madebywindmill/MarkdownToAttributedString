@@ -25,15 +25,15 @@ public enum MarkupType: Hashable, CaseIterable {
     case unknown
     
     // Yes, according to CommonMark semantics list items are blocks (and container blocks at that)
-    var isBlock: Bool {
+    public var isBlock: Bool {
         return [.codeBlock, .heading, .unorderedList, .orderedList, .listItem].contains(self)
     }
     
-    var isContainerBlock: Bool {
+    public var isContainerBlock: Bool {
         return [.unorderedList, .orderedList, .listItem].contains(self)
     }
     
-    var isLeafBlock: Bool {
+    public var isLeafBlock: Bool {
         return [.heading, .codeBlock].contains(self)
     }
 }
