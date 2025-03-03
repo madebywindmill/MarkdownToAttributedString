@@ -305,7 +305,10 @@ public extension StringAttrs {
     
     // Returns true of the attrs includes a container block element.
     var hasContainerBlock: Bool {
-        return hasMarkdownElementType(.orderedList) || hasMarkdownElementType(.unorderedList) || hasMarkdownElementType(.codeBlock)
+        return hasMarkdownElementType(.orderedList)
+            || hasMarkdownElementType(.unorderedList)
+            || hasMarkdownElementType(.listItem)
+            || hasMarkdownElementType(.codeBlock)
     }
             
     func markdownElementAttrForElementType(_ elementType: MarkupType) -> MarkdownElementAttribute? {
