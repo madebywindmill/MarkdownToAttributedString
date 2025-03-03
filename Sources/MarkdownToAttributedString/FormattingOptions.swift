@@ -22,18 +22,18 @@ public struct FormattingOptions {
     /// When `supportedElementTypes` is a subset of `MarkupType.allCases`, the converter will try to skip any unsupported element types.
     public var supportedElementTypes = MarkupType.allCases
     
-    /// When true, any whitespace at the beginning or end of the formatted attributed string is removed. Off by default.
-    public var trimWhitespace: Bool
+    /// When true, any newlines at the beginning or end of the formatted attributed string is removed. Off by default.
+    public var trimNewlines: Bool
     
     public init(addCustomMarkdownElementAttributes: Bool = false,
                 debugLogging: Bool = false,
                 supportedElementTypes: [MarkupType] = MarkupType.allCases,
-                trimWhitespace: Bool = false)
+                trimNewlines: Bool = false)
     {
         self.addCustomMarkdownElementAttributes = addCustomMarkdownElementAttributes
         self.debugLogging = debugLogging
         self.supportedElementTypes = supportedElementTypes
-        self.trimWhitespace = trimWhitespace
+        self.trimNewlines = trimNewlines
     }
     
     public static var `default`: FormattingOptions {

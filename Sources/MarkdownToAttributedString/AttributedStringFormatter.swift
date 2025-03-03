@@ -15,7 +15,7 @@ import Foundation
 public class AttributedStringFormatter {
     
     public var options: FormattingOptions
-
+    
     private var styles: MarkdownStyles?
     
     /// Initialize the formatter with a Markdown string and optional styling.
@@ -30,7 +30,7 @@ public class AttributedStringFormatter {
         self.styles = styles
         self.options = options
     }
-
+    
     /// Immediately converts a Markdown string into an `NSAttributedString` with the given styling.
     ///
     /// - Parameters:
@@ -62,10 +62,10 @@ public class AttributedStringFormatter {
         
         var result = asv.convert()
         
-        if options.trimWhitespace {
+        if options.trimNewlines {
             // Taking care not to butcher a trailing emoji 😅
             let nsString = result.string as NSString
-            let nonWhitespace = CharacterSet.whitespacesAndNewlines.inverted
+            let nonWhitespace = CharacterSet.newlines.inverted
             
             let startRange = nsString.rangeOfCharacter(from: nonWhitespace)
             let endRange = nsString.rangeOfCharacter(from: nonWhitespace, options: .backwards)
@@ -87,7 +87,7 @@ public class AttributedStringFormatter {
                 return NSAttributedString(string: "", attributes: styles?.baseAttributes)
             }
         }
-
+        
         return result
     }
 }
