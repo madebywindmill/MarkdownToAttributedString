@@ -13,7 +13,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
     
     static let defaultMDStyles = MarkdownStyles.default
     static let options = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true)
-    static let trimWhitespaceOptions = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true, trimWhitespace: true)
+    static let trimWhitespaceOptions = FormattingOptions(addCustomMarkdownElementAttributes: true, debugLogging: true, trimNewlines: true)
     
     var defaultFormatter: AttributedStringFormatter!
     var trimWhitespaceFormatter: AttributedStringFormatter!
@@ -215,12 +215,12 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 
         md = "* li1\n  * li1.1\n"
         attrStr = defaultFormatter.format(markdown: md)
-        var listItemAttr = attrStr.startingAttrs.markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
-        XCTAssertEqual(listItemAttr.prefix, "\t• ")
-        XCTAssertEqual(listItemAttr.listDepth, 0)
-        listItemAttr = attrStr.attributes(at: 7, effectiveRange: nil).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
-        XCTAssertEqual(listItemAttr.prefix, "\t\t◦ ")
-        XCTAssertEqual(listItemAttr.listDepth, 1)
+        var listItemAttr = attrStr.startingAttrs.markdownElementAttrForElementType(.listItem)!
+        XCTAssertEqual(listItemAttr.prefix!, "\t• ")
+        XCTAssertEqual(listItemAttr.listDepth!, 0)
+        listItemAttr = attrStr.attributes(at: 7, effectiveRange: nil).markdownElementAttrForElementType(.listItem)!
+        XCTAssertEqual(listItemAttr.prefix!, "\t\t◦ ")
+        XCTAssertEqual(listItemAttr.listDepth!, 1)
         
         md = "- li1\n  - li1.1\n"
         attrStr = defaultFormatter.format(markdown: md)
@@ -255,12 +255,12 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "\t• Item 1\n\t\t◦ Item 1.1\n")
         
-        var liAttr = attrStr.attrsAt(0).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
-        XCTAssertEqual(liAttr.typedDelimiter, "-")
-        XCTAssertEqual(liAttr.renderedDelimiter, "•")
-        liAttr = attrStr.attrsAt(10).markdownElementAttrForElementType(.listItem) as! ListItemMarkdownElementAttribute
-        XCTAssertEqual(liAttr.typedDelimiter, "-")
-        XCTAssertEqual(liAttr.renderedDelimiter, "◦")
+        var liAttr = attrStr.attrsAt(0).markdownElementAttrForElementType(.listItem)!
+        XCTAssertEqual(liAttr.typedDelimiter!, "-")
+        XCTAssertEqual(liAttr.renderedDelimiter!, "•")
+        liAttr = attrStr.attrsAt(10).markdownElementAttrForElementType(.listItem)!
+        XCTAssertEqual(liAttr.typedDelimiter!, "-")
+        XCTAssertEqual(liAttr.renderedDelimiter!, "◦")
 
         // Ensure newline attr is in the list block
         md = "- Item1\n- Item2\n"
@@ -403,7 +403,7 @@ final class MarkdownToAttributedStringTests: XCTestCase {
 
     }
         
-    func testWhitespaceTrimming() {
+    func testNewlineTrimming() {
         var md = "This is 😈 **bold 💯** text with 🎈 emoji.\n"
         var attrStr = defaultFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "This is 😈 bold 💯 text with 🎈 emoji.\n")
@@ -421,13 +421,6 @@ final class MarkdownToAttributedStringTests: XCTestCase {
         XCTAssertEqual(attrStr.string, "😈\n")
         attrStr = trimWhitespaceFormatter.format(markdown: md)
         XCTAssertEqual(attrStr.string, "😈")
-
-        md = "\n\t😈\t\t"
-        attrStr = defaultFormatter.format(markdown: md)
-        XCTAssertEqual(attrStr.string, "😈\t\t\n")
-        attrStr = trimWhitespaceFormatter.format(markdown: md)
-        XCTAssertEqual(attrStr.string, "😈")
-
     }
 
 }

@@ -10,228 +10,346 @@ import Markdown
 
 /// **Experimental**
 ///
-/// By default, converting markdown to NSAttributedString is non-invertible – it can't be converted back to markdown without some potential lossiness. For example, a heading span converted to attributed string will likely be bold and of a certain font size, but based on those attributes alone it's impossible to know whether the associated markdown was `heading` or `strong`.
+/// By default, converting markdown to NSAttributedString is non-invertible – it can't be converted back to markdown without some potential lossiness. For example, a heading span converted to attributed string will have a bold font, but based on that alone it's impossible to know whether the associated markdown was `heading` or `strong`.
 ///
 /// Custom markdown element attributes allow fully invertible conversions because they specifically mark the source markdown in the NSAttributedString.
 ///
 /// When present, the key is `NSAttributedString.Key.MTASMarkdownElements` and the value is a `MarkdownElementAttributes` object.
-open class MarkdownElementAttribute: NSObject, NSCopying {
+public struct MarkdownElementAttribute: Equatable, Hashable, CustomStringConvertible {
+    /// The different variants of markdown attributes
+    public enum AttributeVariant: Equatable, Hashable {
+        /// Basic markdown element with no additional properties
+        case basic
+        
+        /// Heading with a level
+        case heading(level: Int)
+        
+        /// Link with a URL
+        case link(url: URL)
+        
+        /// List item with its properties
+        case listItem(
+            depth: Int,
+            indexInParent: Int,
+            orderedIndex: Int?,
+            prefix: String,
+            typedDelimiter: String,
+            renderedDelimiter: String
+        )
+    }
+
+    /// The type of element this attribute represents
     public var elementType: MarkupType
     
-    public static func == (lhs: MarkdownElementAttribute, rhs: MarkdownElementAttribute) -> Bool {
-        // NB: `Markup` is not Equatable.
-        return lhs.elementType == rhs.elementType
-    }
-
-    public override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? MarkdownElementAttribute else { return false }
-        return self == other
-    }
+    /// The specific variant of this attribute
+    public var variant: AttributeVariant
+        
+    // MARK: - Initializers
     
+    /// Creates a basic markdown element attribute
     public init(elementType: MarkupType) {
         self.elementType = elementType
+        self.variant = .basic
     }
     
-    public override var description: String {
-        let addr = "\(Unmanaged.passUnretained(self).toOpaque())"
-        return "MarkdownElementAttribute<\(elementType): \(addr)>"
+    /// Creates a heading markdown element attribute
+    public static func heading(level: Int) -> MarkdownElementAttribute {
+        var attribute = MarkdownElementAttribute(elementType: .heading)
+        attribute.variant = .heading(level: level)
+        return attribute
     }
     
-    public func copy(with zone: NSZone? = nil) -> Any {
-        return MarkdownElementAttribute(elementType: elementType)
+    /// Creates a link markdown element attribute
+    public static func link(url: URL) -> MarkdownElementAttribute {
+        var attribute = MarkdownElementAttribute(elementType: .link)
+        attribute.variant = .link(url: url)
+        return attribute
     }
-
-    public var betterDescriptionMarker: String {
-        switch elementType {
-            case .strong:
-                return "<Strong>"
-            case .emphasis:
-                return "<Emphasis>"
-            case .strikethrough:
-                return "<Strikethrough>"
-            case .inlineCode:
-                return "<InlineCode>"
-            case .codeBlock:
-                return "<CodeBlock>"
-            case .heading:
-                assertionFailure() // should be a HeadingMarkdownElementAttribute
-                return "<Heading>"
-            case .unorderedList:
-                return "<UnorderedList>"
-            case .orderedList:
-                return "<OrderedList>"
-            case .listItem:
-                return "<ListItem>"
-            case .link:
-                assertionFailure() // should be a LinkMarkdownElementAttribute
-                return "<Link>"
-            case .unknown:
-                return "<Unknown>"
-
+    
+    /// Creates a list item markdown element attribute
+    public static func listItem(
+        depth: Int,
+        indexInParent: Int,
+        orderedIndex: Int? = nil,
+        prefix: String,
+        typedDelimiter: String,
+        renderedDelimiter: String
+    ) -> MarkdownElementAttribute {
+        var attribute = MarkdownElementAttribute(elementType: .listItem)
+        attribute.variant = .listItem(
+            depth: depth,
+            indexInParent: indexInParent,
+            orderedIndex: orderedIndex,
+            prefix: prefix,
+            typedDelimiter: typedDelimiter,
+            renderedDelimiter: renderedDelimiter
+        )
+        return attribute
+    }
+    
+    // MARK: - List Item Convenience Methods
+    
+    /// Increments the index of a list item attribute
+    public mutating func incrementIndex() {
+        guard case let .listItem(depth, indexInParent, orderedIndex, prefix, typedDelimiter, renderedDelimiter) = variant else {
+            return
+        }
+        
+        let newIndexInParent = indexInParent + 1
+        
+        if let orderedIndex = orderedIndex {
+            let newOrderedIndex = orderedIndex + 1
+            let newPrefix = "\t\(newOrderedIndex). "
+            let newTypedDelimiter = "\(newOrderedIndex)"
+            let newRenderedDelimiter = "\(newOrderedIndex)"
+            
+            variant = .listItem(
+                depth: depth,
+                indexInParent: newIndexInParent,
+                orderedIndex: newOrderedIndex,
+                prefix: newPrefix,
+                typedDelimiter: newTypedDelimiter,
+                renderedDelimiter: newRenderedDelimiter
+            )
+        } else {
+            variant = .listItem(
+                depth: depth,
+                indexInParent: newIndexInParent,
+                orderedIndex: nil,
+                prefix: prefix,
+                typedDelimiter: typedDelimiter,
+                renderedDelimiter: renderedDelimiter
+            )
         }
     }
-}
 
-public class HeadingMarkdownElementAttribute: MarkdownElementAttribute {
-    public let level: Int
-    
-    public static func == (lhs: HeadingMarkdownElementAttribute, rhs: HeadingMarkdownElementAttribute) -> Bool
-    {
-        return lhs.elementType == rhs.elementType
-            && lhs.level == rhs.level
-    }
-
-    public override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? HeadingMarkdownElementAttribute else { return false }
-        return self == other
-    }
-
-    public init(level: Int) {
-        self.level = level
-        super.init(elementType: .heading)
-    }
-    
-    public override var betterDescriptionMarker: String {
-        return "<Heading level=\(level)>"
-    }
-
-    public override func copy(with zone: NSZone? = nil) -> Any {
-        return HeadingMarkdownElementAttribute(level: level)
-    }
-
-}
-
-public class LinkMarkdownElementAttribute: MarkdownElementAttribute {
-    public let url: URL
-    
-    public init(url: URL) {
-        self.url = url
-        super.init(elementType: .link)
+    /// Increments the list depth of a list item attribute
+    public mutating func incrementListDepth(unorderedListBullets: [String]? = nil) {
+        guard case let .listItem(depth, _, orderedIndex, prefix, typedDelimiter, renderedDelimiter) = variant else {
+            return
+        }
+        
+        let newDepth = depth + 1
+        let newIndexInParent = 0
+        
+        var newRenderedDelimiter = renderedDelimiter
+        if let bullets = unorderedListBullets {
+            newRenderedDelimiter = bullets[newDepth % bullets.count]
+        }
+        
+        variant = .listItem(
+            depth: newDepth,
+            indexInParent: newIndexInParent,
+            orderedIndex: orderedIndex,
+            prefix: prefix,
+            typedDelimiter: typedDelimiter,
+            renderedDelimiter: newRenderedDelimiter
+        )
     }
     
-    public static func == (lhs: LinkMarkdownElementAttribute, rhs: LinkMarkdownElementAttribute) -> Bool
-    {
-        return lhs.elementType == rhs.elementType
-            && lhs.url == rhs.url
-    }
-
-    public override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? LinkMarkdownElementAttribute else { return false }
-        return self == other
-    }
-
-    public override var betterDescriptionMarker: String {
-        return "<Link url=\(url.absoluteURL)>"
+    /// Decrements the list depth of a list item attribute
+    public mutating func decrementListDepth(unorderedListBullets: [String]? = nil) {
+        guard case let .listItem(depth, indexInParent, orderedIndex, prefix, typedDelimiter, renderedDelimiter) = variant else {
+            return
+        }
+        
+        let newDepth = max(0, depth - 1)
+        
+        var newRenderedDelimiter = renderedDelimiter
+        if let bullets = unorderedListBullets {
+            newRenderedDelimiter = bullets[newDepth % bullets.count]
+        }
+        
+        variant = .listItem(
+            depth: newDepth,
+            indexInParent: indexInParent,
+            orderedIndex: orderedIndex,
+            prefix: prefix,
+            typedDelimiter: typedDelimiter,
+            renderedDelimiter: newRenderedDelimiter
+        )
     }
     
-    public override func copy(with zone: NSZone? = nil) -> Any {
-        return LinkMarkdownElementAttribute(url: url)
+    /// Checks if this list item is the first in its list
+    public var isFirst: Bool {
+        guard case let .listItem(depth, indexInParent, _, _, _, _) = variant else {
+            return false
+        }
+        return indexInParent == 0 && depth == 0
     }
-}
-
-public class ListItemMarkdownElementAttribute: MarkdownElementAttribute {
-    public var listDepth: Int // 0 indexed
-    public var indexInParent: Int
-    public var prefix: String
-    public var typedDelimiter: String // unordered: the bullet char; ordered: the decimal number char
-    public var renderedDelimiter: String
-    public var orderedIndex: Int? // 1-based index in rendered ordered list.
+    
+    // MARK: - List Item Accessors
+    
+    /// Gets the list depth of a list item attribute
+    public var listDepth: Int? {
+        guard case let .listItem(depth, _, _, _, _, _) = variant else {
+            return nil
+        }
+        return depth
+    }
+    
+    /// Gets the index in parent of a list item attribute
+    public var indexInParent: Int? {
+        guard case let .listItem(_, index, _, _, _, _) = variant else {
+            return nil
+        }
+        return index
+    }
+    
+    /// Gets the ordered index of a list item attribute
+    public var orderedIndex: Int? {
+        guard case let .listItem(_, _, orderedIndex, _, _, _) = variant else {
+            return nil
+        }
+        return orderedIndex
+    }
+    
+    /// Gets the prefix of a list item attribute
+    public var prefix: String? {
+        guard case let .listItem(_, _, _, prefix, _, _) = variant else {
+            return nil
+        }
+        return prefix
+    }
+    
+    /// Gets the typed delimiter of a list item attribute
+    public var typedDelimiter: String? {
+        guard case let .listItem(_, _, _, _, typedDelimiter, _) = variant else {
+            return nil
+        }
+        return typedDelimiter
+    }
+    
+    /// Gets the rendered delimiter of a list item attribute
+    public var renderedDelimiter: String? {
+        guard case let .listItem(_, _, _, _, _, renderedDelimiter) = variant else {
+            return nil
+        }
+        return renderedDelimiter
+    }
+    
+    /// Checks if this list item is ordered
     public var isOrdered: Bool {
         return orderedIndex != nil
     }
     
-    public override var description: String {
-        let addr = "\(Unmanaged.passUnretained(self).toOpaque())"
-        return "ListItemMarkdownElementAttribute<\(addr)> (listDepth: \(listDepth), indexInParent: \(indexInParent), prefix: \(prefix))"
-    }
-
-    public override var betterDescriptionMarker: String {
-        if let orderedIndex {
-            return "<ListItem depth=\(listDepth) index=\(indexInParent) orderedIndex=\(orderedIndex) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
-        } else {
-            return "<ListItem depth=\(listDepth) index=\(indexInParent) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+    // MARK: - Heading Accessors
+    
+    /// Gets the level of a heading attribute
+    public var headingLevel: Int? {
+        guard case let .heading(level) = variant else {
+            return nil
         }
+        return level
     }
-
-    public static func == (lhs: ListItemMarkdownElementAttribute, rhs: ListItemMarkdownElementAttribute) -> Bool
-    {
-        return lhs.elementType == rhs.elementType
-            && lhs.listDepth == rhs.listDepth
-            && lhs.indexInParent == rhs.indexInParent
-            && lhs.orderedIndex == rhs.orderedIndex
-            && lhs.prefix == rhs.prefix
-            && lhs.typedDelimiter == rhs.typedDelimiter
-            && lhs.renderedDelimiter == rhs.renderedDelimiter
+    
+    // MARK: - Link Accessors
+    
+    /// Gets the URL of a link attribute
+    public var linkURL: URL? {
+        guard case let .link(url) = variant else {
+            return nil
+        }
+        return url
     }
-
-    public override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? ListItemMarkdownElementAttribute else { return false }
-        return self == other
-    }
-
-    public init(listDepth: Int,
-                indexInParent: Int,
-                orderedIndex: Int? = nil,
-                prefix: String,
-                typedDelimiter: String,
-                renderedDelimiter: String) {
-        self.listDepth = listDepth
-        self.indexInParent = indexInParent
-        self.orderedIndex = orderedIndex
-        self.prefix = prefix
-        self.typedDelimiter = typedDelimiter
-        self.renderedDelimiter = renderedDelimiter
+    
+    // MARK: - Hashable
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(elementType)
         
-        super.init(elementType: .listItem)
-    }
-    
-    public override func copy(with zone: NSZone? = nil) -> Any {
-        return ListItemMarkdownElementAttribute(listDepth: listDepth, indexInParent: indexInParent, orderedIndex: orderedIndex, prefix: prefix, typedDelimiter: typedDelimiter, renderedDelimiter: renderedDelimiter)
-    }
-
-    // Inc's the indexInParent, and, if ordered, orderedIndex, prefix, and renderedDelimiter.
-    public func incrementIndex() {
-        indexInParent += 1
-        if orderedIndex != nil {
-            orderedIndex! += 1
-            prefix = "\t\(orderedIndex!). "
-            typedDelimiter = "\(orderedIndex!)"
-            renderedDelimiter = "\(orderedIndex!)"
+        switch variant {
+        case .basic:
+            hasher.combine(0) // Variant type discriminator
+            
+        case .heading(let level):
+            hasher.combine(1) // Variant type discriminator
+            hasher.combine(level)
+            
+        case .link(let url):
+            hasher.combine(2) // Variant type discriminator
+            hasher.combine(url)
+            
+        case .listItem(let depth, let indexInParent, let orderedIndex, let prefix, let typedDelimiter, let renderedDelimiter):
+            hasher.combine(3) // Variant type discriminator
+            hasher.combine(depth)
+            hasher.combine(indexInParent)
+            hasher.combine(orderedIndex)
+            hasher.combine(prefix)
+            hasher.combine(typedDelimiter)
+            hasher.combine(renderedDelimiter)
         }
     }
     
-    // Sets indexInParent to 0; caller may wish to override.
-    public func incrementListDepth(unorderedListBullets: [String]? = nil) {
-        indexInParent = 0
-        listDepth += 1
-        if let unorderedListBullets {
-            renderedDelimiter = unorderedListBullets[listDepth % unorderedListBullets.count]
+    // MARK: - Description
+    
+    public var betterDescriptionMarker: String {
+        switch variant {
+        case .basic:
+            switch elementType {
+            case .strong: return "<Strong>"
+            case .emphasis: return "<Emphasis>"
+            case .strikethrough: return "<Strikethrough>"
+            case .inlineCode: return "<InlineCode>"
+            case .codeBlock: return "<CodeBlock>"
+            case .unorderedList: return "<UnorderedList>"
+            case .orderedList: return "<OrderedList>"
+            case .unknown: return "<Unknown>"
+            case .heading, .link, .listItem:
+                // Should never happen with proper initialization
+                assertionFailure("Basic variant used with specialized element type")
+                return "<\(elementType)>"
+            }
+            
+        case .heading(let level):
+            return "<Heading level=\(level)>"
+            
+        case .link(let url):
+            return "<Link url=\(url.absoluteURL)>"
+            
+        case .listItem(let depth, let index, let orderedIndex, let prefix, _, _):
+            if let orderedIndex = orderedIndex {
+                return "<ListItem depth=\(depth) index=\(index) orderedIndex=\(orderedIndex) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+            } else {
+                return "<ListItem depth=\(depth) index=\(index) prefix=\"\(prefix.replacingUnprintableCharacters)\">"
+            }
         }
     }
-
-    // Caller should set indexInParent as needed
-    public func decrementListDepth(unorderedListBullets: [String]? = nil) {
-        listDepth -= 1
-        if let unorderedListBullets {
-            renderedDelimiter = unorderedListBullets[listDepth % unorderedListBullets.count]
+    
+    public var description: String {
+        let id = Unmanaged.passUnretained(self as AnyObject).toOpaque()
+        
+        switch variant {
+        case .basic:
+            return "MarkdownElementAttribute<\(elementType): \(id)>"
+            
+        case .heading(let level):
+            return "HeadingMarkdownElementAttribute<\(id)> (level: \(level))"
+            
+        case .link(let url):
+            return "LinkMarkdownElementAttribute<\(id)> (url: \(url))"
+            
+        case .listItem(let depth, let index, let orderedIndex, let prefix, _, _):
+            var desc = "ListItemMarkdownElementAttribute<\(id)> (listDepth: \(depth), indexInParent: \(index)"
+            if let orderedIndex = orderedIndex {
+                desc += ", orderedIndex: \(orderedIndex)"
+            }
+            desc += ", prefix: \(prefix))"
+            return desc
         }
-    }
-
-    public var isFirst: Bool {
-        return indexInParent == 0 && listDepth == 0
     }
 }
-
 
 /// See `FormattingOptions.addCustomMarkdownElementAttributes`.
 public extension NSAttributedString.Key {
     static let markdownElements: NSAttributedString.Key = .init("MTASMarkdownElements")
+    static let forcedLineBreak: NSAttributedString.Key = .init("MTASForcedLineBreak")
     
     // Not used here but potentially useful to clients performing live editing as a semantic marker.
-    static let forcedLineBreak: NSAttributedString.Key = .init("MTASForcedLineBreak")
     static let paragraphBreak: NSAttributedString.Key = .init("MTASParagraphBreak")
 }
 
+/// A container for custom markdown element attributes, for use in string attributes where the key is `NSAttributedString.Key.MTASMarkdownElements`.
 public struct MarkdownElementAttributes: Equatable, Hashable, CustomStringConvertible {
     private var storage: [MarkupType: MarkdownElementAttribute]
 
@@ -300,7 +418,7 @@ public extension StringAttrs {
         return markdownElementAttributes != nil
     }
     
-    // Returns true of the attrs includes a container block element.
+    // Returns true if the attrs includes a container block element.
     var hasContainerBlock: Bool {
         return hasMarkdownElementType(.orderedList)
             || hasMarkdownElementType(.unorderedList)

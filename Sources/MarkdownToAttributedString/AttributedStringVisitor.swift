@@ -352,13 +352,14 @@ struct AttributedStringVisitor: MarkupVisitor {
             }
             
             styleAttrs.addMarkdownElementAttr(
-                ListItemMarkdownElementAttribute(
-                    listDepth: listItem.listDepth,
+                MarkdownElementAttribute.listItem(
+                    depth: listItem.listDepth,
                     indexInParent: listItem.indexInParent,
                     orderedIndex: orderedIndex,
                     prefix: prefix,
                     typedDelimiter: typedDelimiter,
-                    renderedDelimiter: renderedDelimiter)
+                    renderedDelimiter: renderedDelimiter
+                )
             )
         }
         currentAttributes.mergeAttributes(styleAttrs)
@@ -419,7 +420,7 @@ struct AttributedStringVisitor: MarkupVisitor {
         
         if shouldAddCustomAttr {
             styleAttrs.addMarkdownElementAttr(
-                HeadingMarkdownElementAttribute(level: heading.level)
+                MarkdownElementAttribute.heading(level: heading.level)
             )
         }
         
@@ -450,7 +451,7 @@ struct AttributedStringVisitor: MarkupVisitor {
             }
             if shouldAddCustomAttr {
                 styleAttrs.addMarkdownElementAttr(
-                    LinkMarkdownElementAttribute(url: url)
+                    MarkdownElementAttribute.link(url: url)
                 )
             }
             styleAttrs[.link] = url
