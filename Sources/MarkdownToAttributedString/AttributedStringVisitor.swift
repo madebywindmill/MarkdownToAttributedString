@@ -667,7 +667,7 @@ extension StringAttrs {
     mutating func mergeAttributes(_ otherAttrs: StringAttrs) {
         for (key, val) in otherAttrs {
             if key == .markdownElements, let val = val as? MarkdownElementAttributes {
-                let elAttrs = (self[.markdownElements] as? MarkdownElementAttributes)?.copy() as? MarkdownElementAttributes ?? MarkdownElementAttributes()
+                var elAttrs = (self[.markdownElements] as? MarkdownElementAttributes)?.copy() as? MarkdownElementAttributes ?? MarkdownElementAttributes()
                 
                 for (_, newAttribute) in val.allAttributes {
                     elAttrs.add(newAttribute)

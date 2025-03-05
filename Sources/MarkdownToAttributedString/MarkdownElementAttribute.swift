@@ -232,26 +232,23 @@ public extension NSAttributedString.Key {
     static let paragraphBreak: NSAttributedString.Key = .init("MTASParagraphBreak")
 }
 
-public class MarkdownElementAttributes: NSObject, NSCopying {
+public struct MarkdownElementAttributes: Equatable, Hashable, CustomStringConvertible {
     private var storage: [MarkupType: MarkdownElementAttribute]
 
     public init(_ attributes: [MarkupType: MarkdownElementAttribute] = [:]) {
         self.storage = attributes
-        super.init()
     }
 
-    public override func isEqual(_ object: Any?) -> Bool {
-        guard let other = object as? MarkdownElementAttributes else { return false }
-        return self.storage == other.storage
+    static public func == (lhs: MarkdownElementAttributes, rhs: MarkdownElementAttributes) -> Bool {
+        return lhs.storage == rhs.storage
     }
 
-    public override var hash: Int {
-        return storage.hashValue
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(storage)
     }
 
-    public override var description: String {
-        let addr = "\(Unmanaged.passUnretained(self).toOpaque())"
-        return "<MarkdownElementAttributes: \(addr)> \(storage.description)"
+    public var description: String {
+        return "<MarkdownElementAttributes> \(storage.description)"
     }
     
     public var allAttributes: [(MarkupType, MarkdownElementAttribute)] {
@@ -272,11 +269,11 @@ public extension MarkdownElementAttributes {
         return storage[key]
     }
 
-    func add(_ mdElAttr: MarkdownElementAttribute) {
+    mutating func add(_ mdElAttr: MarkdownElementAttribute) {
         storage[mdElAttr.elementType] = mdElAttr
     }
 
-    func remove(_ type: MarkupType) {
+    mutating func remove(_ type: MarkupType) {
         storage[type] = nil
     }
     
@@ -335,7 +332,7 @@ public extension StringAttrs {
     }
     
     mutating func addMarkdownElementAttr(_ attr: MarkdownElementAttribute) {
-        let d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
+        var d = (self[.markdownElements] as? MarkdownElementAttributes) ?? MarkdownElementAttributes()
         d.add(attr)
         self[.markdownElements] = d
     }
