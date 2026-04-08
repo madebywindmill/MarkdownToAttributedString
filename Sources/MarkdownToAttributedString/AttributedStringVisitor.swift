@@ -306,6 +306,13 @@ struct AttributedStringVisitor: MarkupVisitor {
     }
     
 
+    // Satisfies the single-parameter MarkupVisitor protocol requirement so that
+    // protocol dispatch (e.g. markup.accept(&self)) resolves to this type's
+    // implementation rather than the default provided by the protocol extension.
+    mutating func visitListItem(_ listItem: ListItem) {
+        visitListItem(listItem, orderedIndex: nil)
+    }
+
     // orderedIndex is non-nil when part of an ordered list
     mutating func visitListItem(_ listItem: ListItem, orderedIndex: Int? = nil) {
         guard optionsSupportEl(.listItem) else {
